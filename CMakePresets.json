@@ -1,0 +1,87 @@
+{
+  "version": 3,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 22,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "base",
+      "hidden": true,
+      "generator": "Unix Makefiles",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "BUILD_TESTING": "ON"
+      }
+    },
+    {
+      "name": "debug",
+      "inherits": "base",
+      "displayName": "Host debug (hardware backends disabled)",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "PERCEPTION_ENABLE_REALSENSE": "OFF",
+        "PERCEPTION_ENABLE_GSTREAMER": "OFF",
+        "PERCEPTION_ENABLE_OPENCV_TOOLS": "OFF"
+      }
+    },
+    {
+      "name": "jetson-debug",
+      "inherits": "base",
+      "displayName": "Jetson debug (D435i and RTSP enabled)",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "PERCEPTION_ENABLE_REALSENSE": "ON",
+        "PERCEPTION_ENABLE_GSTREAMER": "ON",
+        "PERCEPTION_ENABLE_OPENCV_TOOLS": "ON",
+        "PERCEPTION_REQUIRE_PRODUCTION_DEPENDENCIES": "ON"
+      }
+    },
+    {
+      "name": "release",
+      "inherits": "jetson-debug",
+      "displayName": "Jetson release",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    },
+    {
+      "name": "jetson-local",
+      "inherits": "jetson-debug",
+      "displayName": "Jetson with locally extracted packages",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "PERCEPTION_DEPENDENCY_ROOT": "${sourceDir}/.runtime/sysroot",
+        "CMAKE_PREFIX_PATH": "${sourceDir}/.runtime/sysroot/usr"
+      }
+    }
+  ],
+  "buildPresets": [
+    { "name": "debug", "configurePreset": "debug" },
+    { "name": "jetson-debug", "configurePreset": "jetson-debug" },
+    { "name": "jetson-local", "configurePreset": "jetson-local" },
+    { "name": "release", "configurePreset": "release" }
+  ],
+  "testPresets": [
+    {
+      "name": "debug",
+      "configurePreset": "debug",
+      "output": { "outputOnFailure": true }
+    },
+    {
+      "name": "jetson-debug",
+      "configurePreset": "jetson-debug",
+      "output": { "outputOnFailure": true }
+    },
+    {
+      "name": "jetson-local",
+      "configurePreset": "jetson-local",
+      "output": { "outputOnFailure": true }
+    }
+  ]
+}

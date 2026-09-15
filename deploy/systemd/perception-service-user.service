@@ -1,0 +1,18 @@
+[Unit]
+Description=Quadruped perception service (user installation)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/percpc/workspace/perception-service
+Environment=LD_LIBRARY_PATH=/home/percpc/workspace/perception-service/.runtime/sysroot/usr/lib/aarch64-linux-gnu
+Environment=GST_PLUGIN_PATH=/home/percpc/workspace/perception-service/.runtime/sysroot/usr/lib/aarch64-linux-gnu/gstreamer-1.0
+ExecStart=/home/percpc/workspace/perception-service/build/jetson-local/perception-service /home/percpc/workspace/perception-service/config/default.yaml
+Restart=on-failure
+RestartSec=2s
+TimeoutStopSec=10s
+KillSignal=SIGTERM
+
+[Install]
+WantedBy=default.target

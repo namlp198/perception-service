@@ -1,0 +1,22 @@
+[Unit]
+Description=Quadruped perception service
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=perception
+Group=video
+ExecStart=/opt/perception-service/bin/perception-service /etc/perception-service/default.yaml
+Restart=on-failure
+RestartSec=2s
+TimeoutStopSec=10s
+KillSignal=SIGTERM
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/perception-service /var/log/perception-service
+
+[Install]
+WantedBy=multi-user.target

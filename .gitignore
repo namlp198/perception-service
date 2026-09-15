@@ -1,0 +1,20 @@
+/build/
+/out/
+/.runtime/
+/.cache/
+/compile_commands.json
+/.clangd/
+/.vscode/
+/.idea/
+*.user
+*.swp
+*.log
+/core
+
+# Field recordings and generated media must never be committed.
+/datasets/
+/recordings/
+*.bag
+*.mcap
+*.avi
+*.mp4

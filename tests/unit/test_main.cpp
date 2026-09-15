@@ -1,0 +1,14 @@
+#include <iostream>
+
+auto bounded_queue_test() -> bool;
+auto config_test() -> bool;
+auto camera_health_test() -> bool;
+
+int main() {
+    const bool passed = bounded_queue_test() && config_test() && camera_health_test();
+    if (!passed) {
+        return 1;
+    }
+    std::cout << "All unit tests passed.\n";
+    return 0;
+}
