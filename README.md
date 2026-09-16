@@ -6,19 +6,29 @@ state. Mission authority remains in `robot-agent` at `192.168.1.206`.
 
 ## Current status
 
-This repository is implementing V0.1. RGB, stereo IR and depth acquisition from a D435i are running;
+This repository is implementing V0.1. RGB, depth and IMU acquisition from a D435i are implemented;
 the operator endpoints publish real H.264/RTP through gst-rtsp-server with bounded low-latency
-queues. The backend selects Jetson H.264 when `nvv4l2h264enc` is available and otherwise uses an
-explicit x264 zerolatency fallback. Camera reconnect, graceful shutdown and basic live metrics are
+queues. The deployed Orin Nano has no hardware video encoder, so production RTSP uses a validated
+low-latency `x264enc` path; `nvv4l2h264enc` remains an optional path for Orin NX/AGX targets.
+Camera reconnect, graceful shutdown and basic live metrics are
 implemented. Detailed camera discovery and bounded, independently timestamped accelerometer/gyroscope
 capture are implemented in source; Jetson build and hardware acceptance remain required. Hardware-
 encoder validation and the controlled unplug/replug recovery test also remain V0.1 work.
 
-The deployed D435i profile uses accelerometer 100 Hz and gyroscope 200 Hz. If librealsense cannot
-resolve an enabled IMU profile, or the combined pipeline starts but produces no video frames, the
-long-running service logs the failure and retries in degraded video-only mode so the operator RTSP
-feeds remain available; `imu-info` and hardware acceptance still fail until the combined capture
-path is corrected.
+The D435i profile uses accelerometer 100 Hz and gyroscope 200 Hz. One process owns the D435i, but
+video and IMU are two independent sessions on that device: a video-only `rs2::pipeline` carries
+RGB/depth, and the Motion Module is opened through its own `rs2::sensor` with a callback that queues
+every accel/gyro sample. They are deliberately not combined into one pipeline: librealsense's pipeline
+aggregator withholds every frameset until each enabled stream (including accel and gyro) has produced
+a frame, so a silent IMU would also silence RGB/depth — which is exactly what the 2026-09-16 unified
+build did on the live Jetson. Missing/stale IMU data makes `imu.ready=false` and `ekf.ready=false`
+and triggers a slow, bounded Motion Module restart (`camera.imu.restart_interval_ms`, default 30 s;
+`0` disables) that never touches the video pipeline. IMU data remains mandatory before EKF is allowed
+to run and for full hardware acceptance. Readiness verification runs after systemd has started the
+service, not as `ExecStartPost`, so a failed acceptance probe cannot terminate healthy RGB/depth
+streaming. A full deploy therefore ends in one of three states: hard failure (build/sync/restart or
+RGB/depth RTSP down), success, or exit code 3 = service restarted with RGB/depth live but the
+mandatory IMU acceptance unmet.
 
 ## Build and test on a host
 
@@ -55,9 +65,10 @@ Jetson diagnostics must run while the service is stopped because only one proces
 D435i pipeline:
 
 ```bash
-./build/jetson-local/camera-info config/default.yaml
-./build/jetson-local/imu-info config/default.yaml 10
+./build/jetson-local/camera-info config/default.yaml         # add --hardware-reset to re-enumerate the D435i
+./build/jetson-local/imu-info config/default.yaml 10            # [accel_fps] [gyro_fps] [video|no-video] optional
 ./scripts/jetson/validate-v01-hardware.sh --confirm-service-interruption jetson-local
+./scripts/jetson/verify-running-service.sh
 ```
 
 ## Deploy from the development PC

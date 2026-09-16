@@ -16,6 +16,14 @@ ss -ltn 'sport = :8554'
 ./scripts/test_rtsp.sh 127.0.0.1 /camera/rgb
 ```
 
+`test_rtsp.sh` passes only when real H.264 media arrives. It retries up to three times two seconds
+apart (`PERCEPTION_RTSP_PROBE_ATTEMPTS`, `PERCEPTION_RTSP_PROBE_RETRY_DELAY_S`) because a shared
+gst-rtsp-server media is torn down after its last client leaves and prepared again for the next
+one; a probe that reconnects immediately after another probe (for example `verify-running-service.sh
+streaming` followed at once by `full`) can land in that window even though `stream.frames_published`
+keeps rising. Note that `stream.frames_published` counts frames handed to the RTSP path whether or
+not a client is attached, so it never proves that a client received media — only the probe does.
+
 Camera ownership is exclusive during diagnostics. Do not run RealSense Viewer, `camera-info` or
 `imu-info` alongside the service. For the bounded maintenance workflow that restores the previously
 active service even when a diagnostic fails:
@@ -28,14 +36,69 @@ The service logs cumulative IMU sample/drop counts, effective accelerometer/gyro
 sample ages every five seconds. D435i samples retain separate sensor and host-capture timestamps;
 they are not fabricated into same-time accel/gyro pairs.
 
-If the configured video+IMU request cannot be resolved, or starts but fails the three-frame capture
-liveness threshold, the service emits an error and retries with IMU disabled. This degraded mode
-intentionally keeps RGB and both IR RTSP endpoints online; it is not an IMU acceptance success. Run
-`imu-info` separately while the service is stopped to diagnose the exact motion profile.
+RGB/depth run in a video-only `rs2::pipeline`; the Motion Module runs in its own `rs2::sensor`
+session opened on the pipeline's own `rs2::device` instance (a second instance of the same camera
+runs its own global-time keeper and fails to claim the depth interface every 100 ms, flooding the
+journal with `failed to claim usb interface 0, is busy`). Two warnings remain and are benign:
+occasional `messenger-libusb.cpp control_transfer ... Resource temporarily unavailable` (the
+global-timestamp reader polling the hardware clock while the bus is busy; it retries) and, on this
+unit, `IMU Calibration is not available` — D435i serial 207122078394 carries no IMU calibration, so
+default intrinsics/extrinsics apply until `rs-imu-calibration.py` writes one (a VIO/EKF accuracy
+item, not a streaming one).
 
-On the live Jetson, explicitly setting `camera.imu.enabled: false` and restarting the user service
-restored the RGB, IR-left and IR-right endpoints. This confirms video-only capture, the RTSP listener
-and the x264 fallback independently of the unresolved combined video+IMU path.
+Enabling accel/gyro inside the video pipeline is not allowed: the
+pipeline aggregator withholds every frameset until each enabled stream has delivered a frame, so an
+IMU that never samples also blocks RGB/depth (observed live on 2026-09-16: `camera.frames_received=0`
+plus the three-capture reconnect loop). Missing or stale motion reports
+`imu.ready=false ekf.ready=false` and restarts only the Motion Module every
+`camera.imu.restart_interval_ms` (default 30 s, `0` disables); video capture and RTSP are never
+stopped for an IMU fault. This is not an IMU fallback for estimation: EKF remains locked until both
+sensors are fresh. Readiness probes deliberately run outside the systemd unit startup transaction.
+`restart-service.sh` first requires the streaming check (RGB + depth media) to pass — a hard failure
+otherwise — and then runs the strict full check; when only the IMU part is unmet it exits with code 3
+so the deploy reports "service restarted, RGB/depth live, IMU acceptance FAILED" instead of a generic
+failure, while leaving the service running.
+
+If `imu-info` and the service both report zero accel/gyro samples although `camera-info` lists the
+`Accel`/`Gyro` profiles, the known cause (resolved 2026-09-16) is a Motion Module left in a wedged
+state that survives every process restart and clears only when the camera re-enumerates over USB.
+The deployed Jetson runs a source-built librealsense 2.58.3 with the RSUSB backend (`lsusb -t`
+shows every D435i interface as `Driver=usbfs`); after a re-enumeration the same service build
+streamed accel 100.9 Hz / gyro 200.0 Hz alongside 30 fps RGB/depth with `imu.ready=true`. The
+signature of the wedged state is `motion_callbacks=0` on every `startup_timeout` while
+`Motion Module started sensor='Motion Module' accel=[...] gyro=[...]` shows the exact profiles were
+opened without error, and librealsense's own WARN log (routed to the journal) stays quiet. Recovery:
+
+```bash
+./scripts/jetson/reset-camera.sh --confirm-service-interruption jetson-local   # hardware reset + verify
+```
+
+The reset is operator-only and never automatic because it interrupts RGB/depth for several
+seconds. `imu-info` accepts overrides for a bounded experiment (service stopped):
+
+```bash
+./build/jetson-local/imu-info config/default.yaml 10 100 200 no-video   # Motion Module alone
+./build/jetson-local/imu-info config/default.yaml 10 200 200 no-video   # equal accel/gyro rates
+./build/jetson-local/imu-info config/default.yaml 10 100 200 video      # alongside the video pipeline
+```
+
+Repeated open/close cycles of one session and a full service session were shown not to wedge the
+module; the trigger earlier that day was never isolated (candidates: the abandoned two-pipeline
+design that ended in `No device connected`, or the 4 s Motion Module restart loop it used). If
+librealsense used the native kernel backend instead, the classic checks apply: `lsmod | grep
+hid_sensor`, `/dev/iio:device*` presence and permissions, `sudo dmesg | grep -iE 'hid|iio'`, and
+Intel's patched `hid-sensor-*` modules; rebuilding with `FORCE_RSUSB_BACKEND=ON` is the usual fix.
+
+After any reboot or deployment, do not accept `systemctl active` alone. Require live RGB/depth,
+non-zero accel/gyro counters and H.264 encoding with:
+
+```bash
+./scripts/jetson/verify-running-service.sh
+```
+
+The default `full` mode fails unless video, H.264, accelerometer and gyroscope are all live.
+Use `streaming` only to diagnose the independent RGB/depth branch; it may pass while clearly
+reporting that IMU/EKF is not ready.
 
 ## PC-to-Jetson deployment
 

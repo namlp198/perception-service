@@ -600,7 +600,7 @@ GStreamer
 +
 gst-rtsp-server
 +
-Jetson hardware H.264 encoder
+low-latency x264 H.264 encoder on Orin Nano
 ```
 
 Conceptual pipeline:
@@ -610,11 +610,9 @@ raw frame
    ↓
 appsrc
    ↓
-nvvidconv / format conversion
+videoconvert
    ↓
-NVMM
-   ↓
-nvv4l2h264enc
+x264enc
    ↓
 h264parse
    ↓
@@ -985,10 +983,12 @@ public:
 Only the RealSense backend should directly use:
 
 ```text
-rs2::pipeline
+rs2::pipeline   (video streams only; never accel/gyro)
+rs2::sensor     (Motion Module accel/gyro session, independent of the pipeline)
 rs2::config
 rs2::frameset
 rs2::frame
+rs2::motion_frame
 ```
 
 ---
@@ -1066,6 +1066,9 @@ camera:
     accelerometer_fps: 100
     gyroscope_fps: 200
     queue_capacity: 512
+    startup_timeout_ms: 2000
+    liveness_timeout_ms: 1000
+    restart_interval_ms: 30000
 
 streaming:
   rtsp:
@@ -1073,7 +1076,8 @@ streaming:
     bind_address: "0.0.0.0"
     port: 8554
     codec: "h264"
-    hardware_encoder: true
+    hardware_encoder: false
+    allow_software_fallback: true
 
     rgb:
       enabled: true
@@ -1219,7 +1223,7 @@ Acceptance target:
 ```text
 stable target FPS
 bounded latency
-hardware encoder active
+validated H.264 encoder active (x264 on Orin Nano)
 client reconnect works
 ```
 

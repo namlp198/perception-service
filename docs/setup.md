@@ -2,15 +2,15 @@
 
 ## Target
 
-- NVIDIA Jetson Orin
+- NVIDIA Jetson Orin Nano
 - Ubuntu 22.04
 - GCC 11 or a compatible C++20 compiler
 - CMake 3.22 or newer
 - Intel RealSense D435i
 
 V0.1 production dependencies are librealsense2, OpenCV, Eigen3, yaml-cpp, spdlog, GoogleTest,
-GStreamer and gst-rtsp-server. Jetson deployments also require NVIDIA GStreamer plugins containing
-`nvvidconv` and `nvv4l2h264enc`.
+GStreamer and gst-rtsp-server. The Orin Nano deployment requires `x264enc`; it does not expose
+`nvv4l2h264enc` because the module has no hardware video encoder.
 
 Dependency installation varies with the JetPack/librealsense combination. `scripts/setup.sh` performs
 a non-mutating prerequisite check and prints missing components; it intentionally does not add package
@@ -37,9 +37,20 @@ already installed on the target.
 Build output is isolated under `build/<preset>`. No configure step downloads source code.
 
 The default D435i profile enables accelerometer at 100 Hz and gyroscope at 200 Hz with bounded
-512-sample queues. On Linux, the service user must have permission to open both the UVC video nodes
+512-sample queues, a two-second startup proof deadline, a one-second runtime liveness deadline and a
+30-second bounded Motion Module restart cadence (`restart_interval_ms`, `0` disables) that never
+touches the RGB/depth pipeline.
+On Linux, the service user must have permission to open both the UVC video nodes
 and the D435i motion/IIO interfaces. Use `camera-info` to list the exact profiles exposed by the
 installed firmware/librealsense combination before changing these rates.
+
+The `jetson-local` user service searches `/usr/lib/aarch64-linux-gnu` before its extracted sysroot and
+does not override GStreamer's system plugin path. Validate plugin loading and a real encode before
+service startup:
+
+```bash
+./scripts/jetson/validate-rtsp-encoder.sh
+```
 
 ## Run
 

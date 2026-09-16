@@ -2,8 +2,9 @@
 
 ## V0.1 — Sensor and UI streaming foundation
 
-Repository bootstrap; camera discovery; RGB, stereo IR, depth and IMU capture; local viewer; Jetson
-hardware H.264 RTSP; bounded queues and metrics; camera/client reconnect; graceful shutdown; systemd.
+Repository bootstrap; camera discovery; RGB, stereo IR, depth and IMU capture; local viewer; H.264
+RTSP appropriate to target capability; bounded queues and metrics; camera/client reconnect; graceful
+shutdown; systemd.
 Completion requires successful unplug/replug recovery without a process restart.
 
 Current implementation status (2026-09-16): bootstrap and RGB/IR/depth capture are complete; the
@@ -14,11 +15,13 @@ Detailed discovery, four-view local visualization, and bounded timestamped accel
 implemented in source.
 Live discovery confirms the attached D435i exposes 100/200/400 Hz accelerometer and 200/400 Hz
 gyroscope profiles; the original unsupported 63 Hz accelerometer request was corrected to 100 Hz.
-The combined video+IMU pipeline starts but produces no samples or video on the live unit, so service
-operation currently degrades to the confirmed video-only path. `nvv4l2h264enc` is unavailable and
-x264 fallback is confirmed. V0.1 remains open until Jetson validation resolves combined IMU capture,
-accepts the depth RTSP endpoint, confirms NVIDIA hardware encoding and completes controlled camera
-unplug/replug recovery.
+The unified video+IMU pipeline was proven on the live Jetson to block RGB/depth whenever the IMU
+delivers nothing (pipeline aggregator semantics). Source now runs a video-only pipeline plus an
+independent Motion Module sensor session with a slow bounded restart. IMU liveness is mandatory for
+EKF/full acceptance, but missing IMU samples do not stop the RGB/depth publishing branch. The actual Orin Nano target has no NVENC, so the impossible
+`nvv4l2h264enc` gate was replaced by a real low-latency x264 encode preflight. V0.1 remains open until
+this revision passes Jetson build, strict running
+verification, reboot verification and controlled camera unplug/replug recovery.
 
 ## V0.2 — Depth foundation
 
