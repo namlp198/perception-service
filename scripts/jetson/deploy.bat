@@ -53,7 +53,12 @@ echo.
 "%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe" -NoLogo -NoProfile -ExecutionPolicy Bypass -File "%SCRIPT_DIR%deploy.ps1" -DetailedLog %DEPLOY_ARGUMENTS%
 set "DEPLOY_EXIT_CODE=%ERRORLEVEL%"
 
-if not "%DEPLOY_EXIT_CODE%"=="0" (
+if "%DEPLOY_EXIT_CODE%"=="3" (
+    echo.
+    echo Deployment finished with IMU ACCEPTANCE FAILED ^(exit code 3^).
+    echo Service restarted and RGB/depth RTSP are live, but accel/gyro data is missing.
+    echo IMU data is mandatory before EKF/mission use; see docs\operations.md.
+) else if not "%DEPLOY_EXIT_CODE%"=="0" (
     echo.
     echo Deployment FAILED with exit code %DEPLOY_EXIT_CODE%.
 ) else (

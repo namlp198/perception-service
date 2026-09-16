@@ -191,8 +191,22 @@ fi
 
 if [[ "${restart_service}" == true ]]; then
     echo "Restarting perception-service-user.service on ${ssh_target}..."
+    set +e
     ssh "${ssh_options[@]}" "${ssh_target}" \
         "bash '${remote_dir}/scripts/jetson/restart-service.sh'"
+    restart_status=$?
+    set -e
+    if [[ "${restart_status}" -eq 3 ]]; then
+        # Sync, build, restart and RGB/depth streaming succeeded; only the mandatory IMU
+        # acceptance is unmet. Report it distinctly instead of as a generic failure.
+        echo "Deployment completed with IMU ACCEPTANCE FAILED: service restarted, RGB/depth" \
+            "RTSP live, accel/gyro data missing (mandatory before EKF/mission use)." >&2
+        exit 3
+    elif [[ "${restart_status}" -ne 0 ]]; then
+        echo "Deployment FAILED: service restart or RGB/depth verification failed" \
+            "(exit ${restart_status})." >&2
+        exit "${restart_status}"
+    fi
 fi
 
 echo "Deployment completed successfully."

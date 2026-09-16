@@ -69,15 +69,28 @@ try {
     if ($DetailedLog) { $DeployArguments += '--verbose' }
 
     Write-Host "Starting Jetson deployment at $(Get-Date -Format o)"
-    & $WslExe --cd $ProjectRoot bash ./scripts/jetson/deploy.sh @DeployArguments
-    if ($LASTEXITCODE -ne 0) {
-        throw "Jetson deployment failed with exit code $LASTEXITCODE."
+    & $WslExe --cd $ProjectRoot bash ./scripts/jetson/deploy.sh @DeployArguments 2>&1 |
+        ForEach-Object { Write-Host $_ }
+    $DeployExitCode = $LASTEXITCODE
+    if ($DeployExitCode -eq 3) {
+        # Sync/build/restart and RGB/depth streaming succeeded; only the mandatory IMU
+        # acceptance is unmet. Surface it as its own outcome and preserve the exit code.
+        Write-Warning "Jetson deployment finished with IMU ACCEPTANCE FAILED: service restarted, RGB/depth RTSP live, accel/gyro data missing."
     }
-    Write-Host "Jetson deployment completed at $(Get-Date -Format o)"
+    elseif ($DeployExitCode -ne 0) {
+        throw "Jetson deployment failed with exit code $DeployExitCode."
+    }
+    else {
+        Write-Host "Jetson deployment completed at $(Get-Date -Format o)"
+    }
 }
 finally {
     if ($TranscriptStarted) {
         Stop-Transcript | Out-Null
         Write-Host "Deployment log saved to: $LogPath"
     }
+}
+
+if ($DeployExitCode -eq 3) {
+    exit 3
 }
