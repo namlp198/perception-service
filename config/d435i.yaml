@@ -5,8 +5,8 @@ camera:
   reconnect_interval_ms: 2000
   rgb: { enabled: true, width: 640, height: 480, fps: 30 }
   depth: { enabled: true, width: 640, height: 480, fps: 30 }
-  infrared_left: { enabled: true, width: 640, height: 480, fps: 30 }
-  infrared_right: { enabled: true, width: 640, height: 480, fps: 30 }
+  infrared_left: { enabled: false, width: 640, height: 480, fps: 30 }
+  infrared_right: { enabled: false, width: 640, height: 480, fps: 30 }
   imu:
     enabled: true
     accelerometer_fps: 100

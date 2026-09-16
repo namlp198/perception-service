@@ -3,9 +3,11 @@
 auto bounded_queue_test() -> bool;
 auto config_test() -> bool;
 auto camera_health_test() -> bool;
+auto depth_visualizer_test() -> bool;
 
 int main() {
-    const bool passed = bounded_queue_test() && config_test() && camera_health_test();
+    const bool passed =
+        bounded_queue_test() && config_test() && camera_health_test() && depth_visualizer_test();
     if (!passed) {
         return 1;
     }

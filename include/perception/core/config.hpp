@@ -26,8 +26,8 @@ struct CameraConfig {
     std::string serial;
     ImageStreamConfig rgb;
     ImageStreamConfig depth;
-    ImageStreamConfig infrared_left;
-    ImageStreamConfig infrared_right;
+    ImageStreamConfig infrared_left{false, 640, 480, 30};
+    ImageStreamConfig infrared_right{false, 640, 480, 30};
     ImuConfig imu;
     std::uint32_t capture_timeout_ms{1'000};
     std::uint32_t reconnect_interval_ms{2'000};
@@ -36,6 +36,8 @@ struct CameraConfig {
 struct RtspStreamConfig {
     bool enabled{true};
     std::string path;
+    float min_distance_m{0.2F};
+    float max_distance_m{5.0F};
 };
 
 struct StreamingConfig {
@@ -47,10 +49,10 @@ struct StreamingConfig {
     std::uint32_t bitrate_kbps{4'000};
     std::uint32_t keyframe_interval{30};
     std::size_t queue_capacity{3};
-    RtspStreamConfig rgb{true, "/camera/rgb"};
-    RtspStreamConfig infrared_left{true, "/camera/ir_left"};
-    RtspStreamConfig infrared_right{true, "/camera/ir_right"};
-    RtspStreamConfig depth_visual{false, "/camera/depth_visual"};
+    RtspStreamConfig rgb{true, "/camera/rgb", 0.2F, 5.0F};
+    RtspStreamConfig infrared_left{false, "/camera/ir_left", 0.2F, 5.0F};
+    RtspStreamConfig infrared_right{false, "/camera/ir_right", 0.2F, 5.0F};
+    RtspStreamConfig depth_visual{true, "/camera/depth_visual", 0.2F, 5.0F};
 };
 
 struct RobotAgentConfig {

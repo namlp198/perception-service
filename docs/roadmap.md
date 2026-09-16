@@ -6,13 +6,19 @@ Repository bootstrap; camera discovery; RGB, stereo IR, depth and IMU capture; l
 hardware H.264 RTSP; bounded queues and metrics; camera/client reconnect; graceful shutdown; systemd.
 Completion requires successful unplug/replug recovery without a process restart.
 
-Current implementation status (2026-09-16): bootstrap and RGB/IR/depth capture are complete; all
-three operator RTSP endpoints and user systemd deployment are running on Jetson. Detailed discovery,
-four-view local visualization, and bounded timestamped accel/gyro capture are implemented in source.
+Current implementation status (2026-09-16): bootstrap and RGB/IR/depth capture are complete; the
+RGB and the colorized depth operator RTSP endpoints are confirmed on Jetson. IR acquisition and
+RTSP are now disabled by operator choice to reduce USB and encoding load. The depth palette is being
+updated to a RealSense Viewer-style Jet scale and requires redeployment confirmation.
+Detailed discovery, four-view local visualization, and bounded timestamped accel/gyro capture are
+implemented in source.
 Live discovery confirms the attached D435i exposes 100/200/400 Hz accelerometer and 200/400 Hz
 gyroscope profiles; the original unsupported 63 Hz accelerometer request was corrected to 100 Hz.
-V0.1 remains open until the Jetson build validates IMU sampling, confirms NVIDIA hardware
-encoding and completes client reconnect plus controlled camera unplug/replug recovery.
+The combined video+IMU pipeline starts but produces no samples or video on the live unit, so service
+operation currently degrades to the confirmed video-only path. `nvv4l2h264enc` is unavailable and
+x264 fallback is confirmed. V0.1 remains open until Jetson validation resolves combined IMU capture,
+accepts the depth RTSP endpoint, confirms NVIDIA hardware encoding and completes controlled camera
+unplug/replug recovery.
 
 ## V0.2 — Depth foundation
 

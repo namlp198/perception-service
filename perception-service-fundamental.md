@@ -1050,13 +1050,13 @@ camera:
     fps: 30
 
   infrared_left:
-    enabled: true
+    enabled: false
     width: 640
     height: 480
     fps: 30
 
   infrared_right:
-    enabled: true
+    enabled: false
     width: 640
     height: 480
     fps: 30
@@ -1080,16 +1080,18 @@ streaming:
       path: "/camera/rgb"
 
     infrared_left:
-      enabled: true
+      enabled: false
       path: "/camera/ir_left"
 
     infrared_right:
-      enabled: true
+      enabled: false
       path: "/camera/ir_right"
 
     depth_visual:
-      enabled: false
+      enabled: true
       path: "/camera/depth_visual"
+      min_distance_m: 0.2
+      max_distance_m: 5.0
 
 robot_agent:
   enabled: false

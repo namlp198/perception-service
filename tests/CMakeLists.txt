@@ -9,7 +9,8 @@ else()
         unit/test_main.cpp
         unit/bounded_queue_test.cpp
         unit/config_test.cpp
-        unit/camera_health_test.cpp)
+        unit/camera_health_test.cpp
+        unit/depth_visualizer_test.cpp)
     target_link_libraries(perception-unit-tests PRIVATE perception::core perception_warnings)
 endif()
 add_test(NAME perception-unit-tests COMMAND perception-unit-tests)

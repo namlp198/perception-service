@@ -1,6 +1,7 @@
 #pragma once
 
 #include "perception/camera/camera_types.hpp"
+#include "perception/core/config.hpp"
 #include "perception/streaming/stream_publisher.hpp"
 
 #include <cstddef>
@@ -8,16 +9,17 @@
 namespace perception::streaming {
 
 class StreamManager {
-public:
-    explicit StreamManager(IStreamPublisher& publisher);
+  public:
+    StreamManager(IStreamPublisher& publisher, core::RtspStreamConfig depth_visual_config);
     [[nodiscard]] bool publish(const camera::CameraFrameSet& frame_set);
     [[nodiscard]] auto frames_published() const noexcept -> std::size_t;
     [[nodiscard]] auto frames_dropped() const noexcept -> std::size_t;
 
-private:
+  private:
     IStreamPublisher& publisher_;
+    core::RtspStreamConfig depth_visual_config_;
     std::size_t frames_published_{0};
     std::size_t frames_dropped_{0};
 };
 
-}  // namespace perception::streaming
+} // namespace perception::streaming

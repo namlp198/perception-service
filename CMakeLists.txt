@@ -37,6 +37,7 @@ add_library(
     src/core/application.cpp
     src/core/config.cpp
     src/camera/realsense_camera.cpp
+    src/streaming/depth_visualizer.cpp
     src/streaming/rtsp_server.cpp
     src/streaming/stream_manager.cpp
     src/pipeline/capture_pipeline.cpp

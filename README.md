@@ -7,7 +7,7 @@ state. Mission authority remains in `robot-agent` at `192.168.1.206`.
 ## Current status
 
 This repository is implementing V0.1. RGB, stereo IR and depth acquisition from a D435i are running;
-the three operator endpoints publish real H.264/RTP through gst-rtsp-server with bounded low-latency
+the operator endpoints publish real H.264/RTP through gst-rtsp-server with bounded low-latency
 queues. The backend selects Jetson H.264 when `nvv4l2h264enc` is available and otherwise uses an
 explicit x264 zerolatency fallback. Camera reconnect, graceful shutdown and basic live metrics are
 implemented. Detailed camera discovery and bounded, independently timestamped accelerometer/gyroscope
@@ -43,9 +43,13 @@ The currently enabled user service exposes:
 
 ```text
 rtsp://<JETSON_IP>:8554/camera/rgb
-rtsp://<JETSON_IP>:8554/camera/ir_left
-rtsp://<JETSON_IP>:8554/camera/ir_right
+rtsp://<JETSON_IP>:8554/camera/depth_visual
 ```
+
+`depth_visual` uses RealSense Viewer-style histogram equalization and a Jet palette over the
+configured 0.2–5.0 m range for operator viewing. Values outside the range and invalid zero depth are
+black. It does not replace or modify the original metric Z16 frame used by depth processing. IR
+capture and RTSP mounts are disabled by default to reduce USB and encoder load.
 
 Jetson diagnostics must run while the service is stopped because only one process should own the
 D435i pipeline:

@@ -1,6 +1,7 @@
 #include "perception/core/bounded_queue.hpp"
 #include "perception/core/config.hpp"
 #include "perception/health/camera_health.hpp"
+#include "perception/streaming/depth_visualizer.hpp"
 
 #include <gtest/gtest.h>
 
@@ -20,6 +21,10 @@ TEST(BoundedQueue, DropsOldestItemWhenFull) {
 
 TEST(Config, RejectsQueueOutsideFreshDataRange) {
     perception::core::ServiceConfig config;
+    EXPECT_FALSE(config.camera.infrared_left.enabled);
+    EXPECT_FALSE(config.camera.infrared_right.enabled);
+    EXPECT_FALSE(config.streaming.infrared_left.enabled);
+    EXPECT_FALSE(config.streaming.infrared_right.enabled);
     EXPECT_NO_THROW(perception::core::validate_config(config));
     config.streaming.queue_capacity = 0;
     EXPECT_THROW(perception::core::validate_config(config), std::invalid_argument);
@@ -54,5 +59,37 @@ TEST(Config, RejectsInvalidImuRatesAndCapacity) {
 
     config.camera.imu.accelerometer_fps = 100;
     config.camera.imu.queue_capacity = 31;
+    EXPECT_THROW(perception::core::validate_config(config), std::invalid_argument);
+}
+
+TEST(DepthVisualizer, PreservesTimestampsAndMarksInvalidDepthBlack) {
+    perception::camera::DepthFrame depth;
+    depth.sensor_timestamp_ns = 10;
+    depth.capture_timestamp_ns = 20;
+    depth.frame_number = 30;
+    depth.width = 4;
+    depth.height = 1;
+    depth.depth_scale_m = 0.001F;
+    depth.data = {0U, 500U, 1'250U, 2'000U};
+
+    const auto visual = perception::streaming::colorize_depth(depth, 0.5F, 2.0F);
+    EXPECT_EQ(visual.sensor_timestamp_ns, depth.sensor_timestamp_ns);
+    EXPECT_EQ(visual.capture_timestamp_ns, depth.capture_timestamp_ns);
+    EXPECT_EQ(visual.frame_number, depth.frame_number);
+    ASSERT_EQ(visual.data.size(), 12U);
+    EXPECT_EQ(visual.data[0], 0U);
+    EXPECT_EQ(visual.data[1], 0U);
+    EXPECT_EQ(visual.data[2], 0U);
+    EXPECT_GT(visual.data[3], visual.data[5]);
+    EXPECT_TRUE(visual.data[6] > 0U || visual.data[7] > 0U || visual.data[8] > 0U);
+    EXPECT_EQ(visual.data[9], 0U);
+    EXPECT_EQ(visual.data[10], 0U);
+    EXPECT_GT(visual.data[11], 0U);
+}
+
+TEST(Config, RejectsInvalidDepthVisualRange) {
+    perception::core::ServiceConfig config;
+    config.streaming.depth_visual.min_distance_m = 2.0F;
+    config.streaming.depth_visual.max_distance_m = 1.0F;
     EXPECT_THROW(perception::core::validate_config(config), std::invalid_argument);
 }

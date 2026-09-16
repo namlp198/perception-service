@@ -62,9 +62,8 @@ service_restarted=true
 sleep 5
 systemctl --user --no-pager --full status "${service_name}"
 
-echo "Checking RGB and stereo IR RTSP endpoints..."
+echo "Checking RGB and depth-visual RTSP endpoints..."
 "${project_root}/scripts/test_rtsp.sh" 127.0.0.1 /camera/rgb
-"${project_root}/scripts/test_rtsp.sh" 127.0.0.1 /camera/ir_left
-"${project_root}/scripts/test_rtsp.sh" 127.0.0.1 /camera/ir_right
+"${project_root}/scripts/test_rtsp.sh" 127.0.0.1 /camera/depth_visual
 
 echo "V0.1 hardware acceptance completed successfully."

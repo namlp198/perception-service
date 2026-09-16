@@ -36,6 +36,8 @@ void read_rtsp_stream(const YAML::Node& node, RtspStreamConfig& target) {
     }
     target.enabled = node["enabled"].as<bool>(target.enabled);
     target.path = node["path"].as<std::string>(target.path);
+    target.min_distance_m = node["min_distance_m"].as<float>(target.min_distance_m);
+    target.max_distance_m = node["max_distance_m"].as<float>(target.max_distance_m);
 }
 #endif
 
@@ -132,6 +134,15 @@ void validate_config(const ServiceConfig& config) {
     if (config.streaming.bitrate_kbps == 0 || config.streaming.keyframe_interval == 0) {
         throw std::invalid_argument(
             "streaming bitrate and keyframe interval must be greater than zero");
+    }
+    if (config.streaming.depth_visual.enabled && !config.camera.depth.enabled) {
+        throw std::invalid_argument("camera.depth must be enabled for the depth visual stream");
+    }
+    if (config.streaming.depth_visual.min_distance_m < 0.0F ||
+        config.streaming.depth_visual.max_distance_m <=
+            config.streaming.depth_visual.min_distance_m) {
+        throw std::invalid_argument(
+            "depth visual max_distance_m must be greater than min_distance_m >= 0");
     }
     if (config.robot_agent.enabled && config.robot_agent.port == 0) {
         throw std::invalid_argument("robot_agent.port is intentionally unset; disable integration");

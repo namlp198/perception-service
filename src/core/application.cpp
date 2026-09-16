@@ -70,7 +70,7 @@ int Application::run() {
         return 3;
     }
 
-    streaming::StreamManager streams(rtsp);
+    streaming::StreamManager streams(rtsp, config_.streaming.depth_visual);
     pipeline::CapturePipeline capture(camera, streams, camera_health);
     std::size_t consecutive_capture_failures = 0;
     auto next_metrics_at = std::chrono::steady_clock::now() + std::chrono::seconds(5);

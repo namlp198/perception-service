@@ -9,6 +9,6 @@ streaming:
     keyframe_interval: 30
     queue_capacity: 3
     rgb: { enabled: true, path: "/camera/rgb" }
-    infrared_left: { enabled: true, path: "/camera/ir_left" }
-    infrared_right: { enabled: true, path: "/camera/ir_right" }
-    depth_visual: { enabled: false, path: "/camera/depth_visual" }
+    infrared_left: { enabled: false, path: "/camera/ir_left" }
+    infrared_right: { enabled: false, path: "/camera/ir_right" }
+    depth_visual: { enabled: true, path: "/camera/depth_visual", min_distance_m: 0.2, max_distance_m: 5.0 }
