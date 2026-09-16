@@ -28,10 +28,14 @@ The service logs cumulative IMU sample/drop counts, effective accelerometer/gyro
 sample ages every five seconds. D435i samples retain separate sensor and host-capture timestamps;
 they are not fabricated into same-time accel/gyro pairs.
 
-If the configured video+IMU request cannot be resolved, the service emits an error and retries once
-with IMU disabled. This degraded mode intentionally keeps RGB and both IR RTSP endpoints online;
-it is not an IMU acceptance success. Run `imu-info` separately while the service is stopped to
-diagnose the exact motion profile.
+If the configured video+IMU request cannot be resolved, or starts but fails the three-frame capture
+liveness threshold, the service emits an error and retries with IMU disabled. This degraded mode
+intentionally keeps RGB and both IR RTSP endpoints online; it is not an IMU acceptance success. Run
+`imu-info` separately while the service is stopped to diagnose the exact motion profile.
+
+On the live Jetson, explicitly setting `camera.imu.enabled: false` and restarting the user service
+restored the RGB, IR-left and IR-right endpoints. This confirms video-only capture, the RTSP listener
+and the x264 fallback independently of the unresolved combined video+IMU path.
 
 ## PC-to-Jetson deployment
 

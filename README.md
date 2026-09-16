@@ -15,9 +15,10 @@ capture are implemented in source; Jetson build and hardware acceptance remain r
 encoder validation and the controlled unplug/replug recovery test also remain V0.1 work.
 
 The deployed D435i profile uses accelerometer 100 Hz and gyroscope 200 Hz. If librealsense cannot
-resolve an enabled IMU profile, the long-running service logs the failure and retries in degraded
-video-only mode so the operator RTSP feeds remain available; `imu-info` and hardware acceptance
-still fail until the IMU profile is corrected.
+resolve an enabled IMU profile, or the combined pipeline starts but produces no video frames, the
+long-running service logs the failure and retries in degraded video-only mode so the operator RTSP
+feeds remain available; `imu-info` and hardware acceptance still fail until the combined capture
+path is corrected.
 
 ## Build and test on a host
 

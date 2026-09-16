@@ -91,6 +91,13 @@ int Application::run() {
 #if defined(PERCEPTION_HAS_SPDLOG)
                 spdlog::warn("camera capture failed; entering reconnect loop");
 #endif
+                if (camera.imu_enabled()) {
+#if defined(PERCEPTION_HAS_SPDLOG)
+                    spdlog::error("video+IMU pipeline produced no video frames; disabling IMU "
+                                  "and reconnecting in degraded video-only mode");
+#endif
+                    camera.disable_imu();
+                }
                 while (!stop_requested_ && !connect_camera()) {
                     std::this_thread::sleep_for(
                         std::chrono::milliseconds(config_.camera.reconnect_interval_ms));
