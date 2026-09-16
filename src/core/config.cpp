@@ -60,6 +60,12 @@ ServiceConfig load_config(const std::filesystem::path& path) {
                 imu["gyroscope_fps"].as<int>(config.camera.imu.gyroscope_fps);
             config.camera.imu.queue_capacity =
                 imu["queue_capacity"].as<std::size_t>(config.camera.imu.queue_capacity);
+            config.camera.imu.startup_timeout_ms =
+                imu["startup_timeout_ms"].as<std::uint32_t>(config.camera.imu.startup_timeout_ms);
+            config.camera.imu.liveness_timeout_ms =
+                imu["liveness_timeout_ms"].as<std::uint32_t>(config.camera.imu.liveness_timeout_ms);
+            config.camera.imu.restart_interval_ms =
+                imu["restart_interval_ms"].as<std::uint32_t>(config.camera.imu.restart_interval_ms);
         }
         config.camera.capture_timeout_ms =
             camera["capture_timeout_ms"].as<std::uint32_t>(config.camera.capture_timeout_ms);
@@ -115,12 +121,22 @@ void validate_config(const ServiceConfig& config) {
     validate_stream(config.camera.depth, "camera.depth");
     validate_stream(config.camera.infrared_left, "camera.infrared_left");
     validate_stream(config.camera.infrared_right, "camera.infrared_right");
-    if (config.camera.imu.enabled &&
-        (config.camera.imu.accelerometer_fps <= 0 || config.camera.imu.gyroscope_fps <= 0)) {
+    if (!config.camera.imu.enabled) {
+        throw std::invalid_argument("camera.imu must be enabled for perception-service readiness");
+    }
+    if (config.camera.imu.accelerometer_fps <= 0 || config.camera.imu.gyroscope_fps <= 0) {
         throw std::invalid_argument("camera.imu sample rates must be greater than zero");
     }
     if (config.camera.imu.queue_capacity < 32 || config.camera.imu.queue_capacity > 4'096) {
         throw std::invalid_argument("camera.imu queue_capacity must be in the range 32..4096");
+    }
+    if (config.camera.imu.startup_timeout_ms == 0 || config.camera.imu.liveness_timeout_ms == 0) {
+        throw std::invalid_argument("camera.imu timeout values must be greater than zero");
+    }
+    if (config.camera.imu.restart_interval_ms != 0 &&
+        config.camera.imu.restart_interval_ms < config.camera.imu.startup_timeout_ms) {
+        throw std::invalid_argument(
+            "camera.imu restart_interval_ms must be 0 or at least startup_timeout_ms");
     }
     if (config.camera.capture_timeout_ms == 0 || config.camera.reconnect_interval_ms == 0) {
         throw std::invalid_argument("camera timeout values must be greater than zero");

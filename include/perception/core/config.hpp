@@ -15,10 +15,15 @@ struct ImageStreamConfig {
 };
 
 struct ImuConfig {
-    bool enabled{false};
+    bool enabled{true};
     int accelerometer_fps{100};
     int gyroscope_fps{200};
     std::size_t queue_capacity{512};
+    std::uint32_t startup_timeout_ms{2'000};
+    std::uint32_t liveness_timeout_ms{1'000};
+    // Bounded Motion Module restart cadence while IMU data is missing or stale; 0 disables it.
+    // Kept slow so retries never stress the shared USB device that also carries RGB/depth.
+    std::uint32_t restart_interval_ms{30'000};
 };
 
 struct CameraConfig {
@@ -44,7 +49,7 @@ struct StreamingConfig {
     bool enabled{true};
     std::string bind_address{"0.0.0.0"};
     std::uint16_t port{8554};
-    bool hardware_encoder{true};
+    bool hardware_encoder{false};
     bool allow_software_fallback{true};
     std::uint32_t bitrate_kbps{4'000};
     std::uint32_t keyframe_interval{30};

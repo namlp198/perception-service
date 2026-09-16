@@ -12,13 +12,16 @@ camera:
     accelerometer_fps: 100
     gyroscope_fps: 200
     queue_capacity: 512
+    startup_timeout_ms: 2000
+    liveness_timeout_ms: 1000
+    restart_interval_ms: 30000
 
 streaming:
   rtsp:
     enabled: true
     bind_address: "0.0.0.0"
     port: 8554
-    hardware_encoder: true
+    hardware_encoder: false
     allow_software_fallback: true
     bitrate_kbps: 4000
     keyframe_interval: 30

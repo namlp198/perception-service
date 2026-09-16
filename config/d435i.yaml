@@ -12,3 +12,6 @@ camera:
     accelerometer_fps: 100
     gyroscope_fps: 200
     queue_capacity: 512
+    startup_timeout_ms: 2000
+    liveness_timeout_ms: 1000
+    restart_interval_ms: 30000

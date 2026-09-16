@@ -25,7 +25,19 @@ TEST(Config, RejectsQueueOutsideFreshDataRange) {
     EXPECT_FALSE(config.camera.infrared_right.enabled);
     EXPECT_FALSE(config.streaming.infrared_left.enabled);
     EXPECT_FALSE(config.streaming.infrared_right.enabled);
+    EXPECT_FALSE(config.streaming.hardware_encoder);
+    EXPECT_TRUE(config.streaming.allow_software_fallback);
+    EXPECT_TRUE(config.camera.imu.enabled);
+    EXPECT_EQ(config.camera.imu.startup_timeout_ms, 2'000U);
+    EXPECT_EQ(config.camera.imu.liveness_timeout_ms, 1'000U);
+    EXPECT_EQ(config.camera.imu.restart_interval_ms, 30'000U);
     EXPECT_NO_THROW(perception::core::validate_config(config));
+    // A Motion Module retry faster than the startup proof window is rejected; 0 disables retries.
+    config.camera.imu.restart_interval_ms = 1'000;
+    EXPECT_THROW(perception::core::validate_config(config), std::invalid_argument);
+    config.camera.imu.restart_interval_ms = 0;
+    EXPECT_NO_THROW(perception::core::validate_config(config));
+    config.camera.imu.restart_interval_ms = 30'000;
     config.streaming.queue_capacity = 0;
     EXPECT_THROW(perception::core::validate_config(config), std::invalid_argument);
 }

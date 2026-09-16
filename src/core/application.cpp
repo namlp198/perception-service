@@ -23,23 +23,9 @@ int Application::run() {
     camera::RealSenseCamera camera(config_.camera);
     health::CameraHealth camera_health;
     camera_health.set_status(health::CameraStatus::Initializing);
-    const auto connect_camera = [&camera]() {
-        if (!camera.initialize()) {
-            return false;
-        }
-        if (camera.start()) {
-            return true;
-        }
-        if (!camera.imu_enabled()) {
-            return false;
-        }
-#if defined(PERCEPTION_HAS_SPDLOG)
-        spdlog::error("RealSense video+IMU profile could not start; retrying in degraded "
-                      "video-only mode so RTSP remains available");
-#endif
-        camera.disable_imu();
-        return camera.initialize() && camera.start();
-    };
+    // start() reports only the video pipeline. The Motion Module is started, monitored and
+    // restarted inside the camera, so an IMU fault never gates RGB/depth.
+    const auto connect_camera = [&camera]() { return camera.initialize() && camera.start(); };
     while (!stop_requested_ && !connect_camera()) {
 #if defined(PERCEPTION_HAS_SPDLOG)
         spdlog::warn("RealSense unavailable; retrying in {} ms",
@@ -91,13 +77,6 @@ int Application::run() {
 #if defined(PERCEPTION_HAS_SPDLOG)
                 spdlog::warn("camera capture failed; entering reconnect loop");
 #endif
-                if (camera.imu_enabled()) {
-#if defined(PERCEPTION_HAS_SPDLOG)
-                    spdlog::error("video+IMU pipeline produced no video frames; disabling IMU "
-                                  "and reconnecting in degraded video-only mode");
-#endif
-                    camera.disable_imu();
-                }
                 while (!stop_requested_ && !connect_camera()) {
                     std::this_thread::sleep_for(
                         std::chrono::milliseconds(config_.camera.reconnect_interval_ms));
@@ -127,18 +106,24 @@ int Application::run() {
                     ? static_cast<double>(health.gyroscope_samples - previous_gyroscope_samples) /
                           interval_seconds
                     : 0.0;
+            const auto imu_timeout =
+                std::chrono::milliseconds(config_.camera.imu.liveness_timeout_ms);
+            const bool imu_ready = config_.camera.imu.enabled && health.accelerometer_samples > 0 &&
+                                   health.gyroscope_samples > 0 &&
+                                   health.accelerometer_age <= imu_timeout &&
+                                   health.gyroscope_age <= imu_timeout;
             spdlog::info("camera.frames_received={} camera.frames_dropped={} "
                          "camera.frame_age_ms={} stream.frames_published={} "
                          "stream.frames_dropped={} imu.accel_samples={} "
                          "imu.accel_hz={:.1f} imu.accel_age_ms={} imu.accel_dropped={} "
                          "imu.gyro_samples={} imu.gyro_hz={:.1f} imu.gyro_age_ms={} "
-                         "imu.gyro_dropped={}",
+                         "imu.gyro_dropped={} imu.ready={} ekf.ready={}",
                          health.frames_received, health.frames_dropped, health.frame_age.count(),
                          streams.frames_published(), streams.frames_dropped(),
                          health.accelerometer_samples, accelerometer_hz,
                          health.accelerometer_age.count(), health.accelerometer_dropped,
                          health.gyroscope_samples, gyroscope_hz, health.gyroscope_age.count(),
-                         health.gyroscope_dropped);
+                         health.gyroscope_dropped, imu_ready, imu_ready);
             previous_metrics_at = now;
             previous_accelerometer_samples = health.accelerometer_samples;
             previous_gyroscope_samples = health.gyroscope_samples;

@@ -22,14 +22,20 @@ class RealSenseCamera final : public ICamera {
     [[nodiscard]] bool initialize() override;
     [[nodiscard]] bool start() override;
     void stop() noexcept override;
-    void disable_imu() noexcept;
-    [[nodiscard]] bool imu_enabled() const noexcept;
     [[nodiscard]] bool capture(CameraFrameSet& frame_set) override;
     [[nodiscard]] auto device_info() const -> std::optional<CameraDeviceInfo>;
+    // Operator-triggered USB re-enumeration of the selected device (equivalent to a replug).
+    // Never invoked automatically: it interrupts RGB/depth for several seconds.
+    [[nodiscard]] bool hardware_reset();
 
   private:
     class Impl;
     std::unique_ptr<Impl> impl_;
+
+    // Motion Module session management; independent of the video pipeline lifecycle.
+    bool start_motion() noexcept;
+    void stop_motion() noexcept;
+    void update_motion_state() noexcept;
 };
 
 } // namespace perception::camera
