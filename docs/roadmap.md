@@ -6,6 +6,14 @@ Repository bootstrap; camera discovery; RGB, stereo IR, depth and IMU capture; l
 hardware H.264 RTSP; bounded queues and metrics; camera/client reconnect; graceful shutdown; systemd.
 Completion requires successful unplug/replug recovery without a process restart.
 
+Current implementation status (2026-09-16): bootstrap and RGB/IR/depth capture are complete; all
+three operator RTSP endpoints and user systemd deployment are running on Jetson. Detailed discovery,
+four-view local visualization, and bounded timestamped accel/gyro capture are implemented in source.
+Live discovery confirms the attached D435i exposes 100/200/400 Hz accelerometer and 200/400 Hz
+gyroscope profiles; the original unsupported 63 Hz accelerometer request was corrected to 100 Hz.
+V0.1 remains open until the Jetson build validates IMU sampling, confirms NVIDIA hardware
+encoding and completes client reconnect plus controlled camera unplug/replug recovery.
+
 ## V0.2 — Depth foundation
 
 Invalid-depth removal, clipping and filters followed by point-cloud generation and robot-frame

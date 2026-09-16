@@ -1,9 +1,12 @@
 #include "perception/camera/realsense_camera.hpp"
 
+#include "perception/core/bounded_queue.hpp"
+
 #include <chrono>
 #include <cstdint>
 #include <cstring>
-#include <mutex>
+#include <optional>
+#include <string>
 #include <utility>
 
 #if defined(PERCEPTION_HAS_REALSENSE)
@@ -17,28 +20,83 @@
 namespace perception::camera {
 
 class RealSenseCamera::Impl {
-public:
+  public:
     explicit Impl(core::CameraConfig value) : config(std::move(value)) {}
 
     core::CameraConfig config;
     bool initialized{false};
     bool running{false};
+    std::optional<CameraDeviceInfo> device_info;
 #if defined(PERCEPTION_HAS_REALSENSE)
     rs2::pipeline pipeline;
     rs2::config pipeline_config;
     std::unique_ptr<rs2::frame_queue> video_queue;
-    std::mutex imu_mutex;
-    ImuSample latest_imu;
-    bool acceleration_received{false};
-    bool gyroscope_received{false};
+    std::unique_ptr<core::BoundedQueue<AccelerometerSample>> accelerometer_queue;
+    std::unique_ptr<core::BoundedQueue<GyroscopeSample>> gyroscope_queue;
     float depth_scale_m{0.001F};
 #endif
 };
 
+#if defined(PERCEPTION_HAS_REALSENSE)
+namespace {
+
+auto read_device_info(const rs2::device& device) -> CameraDeviceInfo {
+    CameraDeviceInfo info;
+    const auto read_info = [&device](rs2_camera_info key) -> std::string {
+        return device.supports(key) ? device.get_info(key) : "unavailable";
+    };
+    info.model = read_info(RS2_CAMERA_INFO_NAME);
+    info.serial = read_info(RS2_CAMERA_INFO_SERIAL_NUMBER);
+    info.firmware = read_info(RS2_CAMERA_INFO_FIRMWARE_VERSION);
+    info.usb_mode = read_info(RS2_CAMERA_INFO_USB_TYPE_DESCRIPTOR);
+
+    for (const rs2::sensor& sensor : device.query_sensors()) {
+        if (const rs2::depth_sensor depth = sensor.as<rs2::depth_sensor>()) {
+            info.depth_scale_m = depth.get_depth_scale();
+        }
+        for (const rs2::stream_profile& profile : sensor.get_stream_profiles()) {
+            CameraStreamProfileInfo profile_info;
+            profile_info.stream = rs2_stream_to_string(profile.stream_type());
+            profile_info.index = profile.stream_index();
+            profile_info.format = rs2_format_to_string(profile.format());
+            profile_info.fps = profile.fps();
+            if (const rs2::video_stream_profile video = profile.as<rs2::video_stream_profile>()) {
+                profile_info.width = video.width();
+                profile_info.height = video.height();
+                try {
+                    const rs2_intrinsics source = video.get_intrinsics();
+                    CameraIntrinsics intrinsics;
+                    intrinsics.width = source.width;
+                    intrinsics.height = source.height;
+                    intrinsics.principal_x = source.ppx;
+                    intrinsics.principal_y = source.ppy;
+                    intrinsics.focal_x = source.fx;
+                    intrinsics.focal_y = source.fy;
+                    intrinsics.distortion_model = rs2_distortion_to_string(source.model);
+                    for (std::size_t index = 0; index < intrinsics.coefficients.size(); ++index) {
+                        intrinsics.coefficients[index] = source.coeffs[index];
+                    }
+                    profile_info.intrinsics = intrinsics;
+                } catch (const rs2::error&) {
+                    // Some firmware-exposed video profiles are valid for enumeration but do not
+                    // publish calibration. Keep the profile and report intrinsics as unavailable.
+                }
+            }
+            info.stream_profiles.push_back(std::move(profile_info));
+        }
+    }
+    return info;
+}
+
+} // namespace
+#endif
+
 RealSenseCamera::RealSenseCamera(core::CameraConfig config)
     : impl_(std::make_unique<Impl>(std::move(config))) {}
 
-RealSenseCamera::~RealSenseCamera() { stop(); }
+RealSenseCamera::~RealSenseCamera() {
+    stop();
+}
 RealSenseCamera::RealSenseCamera(RealSenseCamera&&) noexcept = default;
 auto RealSenseCamera::operator=(RealSenseCamera&&) noexcept -> RealSenseCamera& = default;
 
@@ -50,9 +108,23 @@ bool RealSenseCamera::initialize() {
         if (devices.size() == 0) {
             return false;
         }
+        std::optional<rs2::device> selected;
         if (!impl_->config.serial.empty()) {
-            impl_->pipeline_config.enable_device(impl_->config.serial);
+            for (const rs2::device& device : devices) {
+                if (device.supports(RS2_CAMERA_INFO_SERIAL_NUMBER) &&
+                    impl_->config.serial == device.get_info(RS2_CAMERA_INFO_SERIAL_NUMBER)) {
+                    selected = device;
+                    break;
+                }
+            }
+            if (!selected.has_value()) {
+                return false;
+            }
+        } else {
+            selected = devices[0];
         }
+        impl_->pipeline_config.enable_device(selected->get_info(RS2_CAMERA_INFO_SERIAL_NUMBER));
+        impl_->device_info = read_device_info(*selected);
         impl_->initialized = true;
         return true;
     } catch (const rs2::error& error) {
@@ -75,31 +147,35 @@ bool RealSenseCamera::start() {
         const auto& camera = impl_->config;
         if (camera.rgb.enabled) {
             impl_->pipeline_config.enable_stream(RS2_STREAM_COLOR, camera.rgb.width,
-                                                 camera.rgb.height, RS2_FORMAT_BGR8, camera.rgb.fps);
+                                                 camera.rgb.height, RS2_FORMAT_BGR8,
+                                                 camera.rgb.fps);
         }
         if (camera.depth.enabled) {
             impl_->pipeline_config.enable_stream(RS2_STREAM_DEPTH, camera.depth.width,
-                                                 camera.depth.height, RS2_FORMAT_Z16, camera.depth.fps);
+                                                 camera.depth.height, RS2_FORMAT_Z16,
+                                                 camera.depth.fps);
         }
         if (camera.infrared_left.enabled) {
-            impl_->pipeline_config.enable_stream(RS2_STREAM_INFRARED, 1,
-                                                 camera.infrared_left.width,
+            impl_->pipeline_config.enable_stream(RS2_STREAM_INFRARED, 1, camera.infrared_left.width,
                                                  camera.infrared_left.height, RS2_FORMAT_Y8,
                                                  camera.infrared_left.fps);
         }
         if (camera.infrared_right.enabled) {
-            impl_->pipeline_config.enable_stream(RS2_STREAM_INFRARED, 2,
-                                                 camera.infrared_right.width,
-                                                 camera.infrared_right.height, RS2_FORMAT_Y8,
-                                                 camera.infrared_right.fps);
+            impl_->pipeline_config.enable_stream(
+                RS2_STREAM_INFRARED, 2, camera.infrared_right.width, camera.infrared_right.height,
+                RS2_FORMAT_Y8, camera.infrared_right.fps);
         }
-        if (camera.imu_enabled) {
-            impl_->pipeline_config.enable_stream(RS2_STREAM_ACCEL, RS2_FORMAT_MOTION_XYZ32F);
-            impl_->pipeline_config.enable_stream(RS2_STREAM_GYRO, RS2_FORMAT_MOTION_XYZ32F);
+        if (camera.imu.enabled) {
+            impl_->pipeline_config.enable_stream(RS2_STREAM_ACCEL, RS2_FORMAT_MOTION_XYZ32F,
+                                                 camera.imu.accelerometer_fps);
+            impl_->pipeline_config.enable_stream(RS2_STREAM_GYRO, RS2_FORMAT_MOTION_XYZ32F,
+                                                 camera.imu.gyroscope_fps);
+            impl_->accelerometer_queue = std::make_unique<core::BoundedQueue<AccelerometerSample>>(
+                camera.imu.queue_capacity);
+            impl_->gyroscope_queue =
+                std::make_unique<core::BoundedQueue<GyroscopeSample>>(camera.imu.queue_capacity);
         }
         impl_->video_queue = std::make_unique<rs2::frame_queue>(2);
-        impl_->acceleration_received = false;
-        impl_->gyroscope_received = false;
         const rs2::pipeline_profile profile =
             impl_->pipeline.start(impl_->pipeline_config, [this](const rs2::frame& frame) {
                 const auto now = std::chrono::steady_clock::now().time_since_epoch();
@@ -107,16 +183,16 @@ bool RealSenseCamera::start() {
                     std::chrono::duration_cast<std::chrono::nanoseconds>(now).count());
                 if (const rs2::motion_frame motion = frame.as<rs2::motion_frame>()) {
                     const rs2_vector data = motion.get_motion_data();
-                    std::scoped_lock lock(impl_->imu_mutex);
-                    impl_->latest_imu.sensor_timestamp_ns =
+                    const auto sensor_timestamp_ns =
                         static_cast<std::uint64_t>(motion.get_timestamp() * 1'000'000.0);
-                    impl_->latest_imu.capture_timestamp_ns = capture_ns;
-                    if (motion.get_profile().stream_type() == RS2_STREAM_ACCEL) {
-                        impl_->latest_imu.acceleration_mps2 = {data.x, data.y, data.z};
-                        impl_->acceleration_received = true;
-                    } else if (motion.get_profile().stream_type() == RS2_STREAM_GYRO) {
-                        impl_->latest_imu.angular_velocity_rps = {data.x, data.y, data.z};
-                        impl_->gyroscope_received = true;
+                    if (motion.get_profile().stream_type() == RS2_STREAM_ACCEL &&
+                        impl_->accelerometer_queue) {
+                        impl_->accelerometer_queue->push(
+                            {sensor_timestamp_ns, capture_ns, {data.x, data.y, data.z}});
+                    } else if (motion.get_profile().stream_type() == RS2_STREAM_GYRO &&
+                               impl_->gyroscope_queue) {
+                        impl_->gyroscope_queue->push(
+                            {sensor_timestamp_ns, capture_ns, {data.x, data.y, data.z}});
                     }
                     return;
                 }
@@ -133,6 +209,9 @@ bool RealSenseCamera::start() {
         spdlog::error("RealSense start failed: {}", error.what());
 #endif
         impl_->running = false;
+        impl_->video_queue.reset();
+        impl_->accelerometer_queue.reset();
+        impl_->gyroscope_queue.reset();
         return false;
     }
 #else
@@ -154,8 +233,29 @@ void RealSenseCamera::stop() noexcept {
         impl_->running = false;
 #if defined(PERCEPTION_HAS_REALSENSE)
         impl_->video_queue.reset();
+        if (impl_->accelerometer_queue) {
+            impl_->accelerometer_queue->stop();
+        }
+        if (impl_->gyroscope_queue) {
+            impl_->gyroscope_queue->stop();
+        }
+        impl_->accelerometer_queue.reset();
+        impl_->gyroscope_queue.reset();
 #endif
     }
+}
+
+void RealSenseCamera::disable_imu() noexcept {
+    stop();
+    impl_->config.imu.enabled = false;
+    impl_->initialized = false;
+#if defined(PERCEPTION_HAS_REALSENSE)
+    impl_->pipeline_config = rs2::config{};
+#endif
+}
+
+bool RealSenseCamera::imu_enabled() const noexcept {
+    return impl_->config.imu.enabled;
 }
 
 bool RealSenseCamera::capture(CameraFrameSet& frame_set) {
@@ -221,10 +321,22 @@ bool RealSenseCamera::capture(CameraFrameSet& frame_set) {
             std::memcpy(frame_set.depth.data.data(), depth.get_data(),
                         element_count * sizeof(std::uint16_t));
         }
-        {
-            std::scoped_lock lock(impl_->imu_mutex);
-            if (impl_->acceleration_received && impl_->gyroscope_received) {
-                frame_set.imu = impl_->latest_imu;
+        if (impl_->accelerometer_queue || impl_->gyroscope_queue) {
+            ImuBatch imu;
+            if (impl_->accelerometer_queue) {
+                while (const auto sample = impl_->accelerometer_queue->try_pop()) {
+                    imu.accelerometer.push_back(*sample);
+                }
+                imu.accelerometer_dropped = impl_->accelerometer_queue->dropped_count();
+            }
+            if (impl_->gyroscope_queue) {
+                while (const auto sample = impl_->gyroscope_queue->try_pop()) {
+                    imu.gyroscope.push_back(*sample);
+                }
+                imu.gyroscope_dropped = impl_->gyroscope_queue->dropped_count();
+            }
+            if (!imu.accelerometer.empty() || !imu.gyroscope.empty()) {
+                frame_set.imu = std::move(imu);
             }
         }
         return true;
@@ -240,4 +352,8 @@ bool RealSenseCamera::capture(CameraFrameSet& frame_set) {
 #endif
 }
 
-}  // namespace perception::camera
+auto RealSenseCamera::device_info() const -> std::optional<CameraDeviceInfo> {
+    return impl_->device_info;
+}
+
+} // namespace perception::camera

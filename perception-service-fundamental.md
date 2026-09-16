@@ -530,12 +530,24 @@ struct DepthFrame
 ```
 
 ```cpp
-struct ImuSample
+struct AccelerometerSample
 {
-    std::uint64_t timestamp_ns {};
-
+    std::uint64_t sensor_timestamp_ns {};
+    std::uint64_t capture_timestamp_ns {};
     Eigen::Vector3f acceleration_mps2 {};
+};
+
+struct GyroscopeSample
+{
+    std::uint64_t sensor_timestamp_ns {};
+    std::uint64_t capture_timestamp_ns {};
     Eigen::Vector3f angular_velocity_rps {};
+};
+
+struct ImuBatch
+{
+    std::vector<AccelerometerSample> accelerometer;
+    std::vector<GyroscopeSample> gyroscope;
 };
 ```
 
@@ -549,11 +561,13 @@ struct CameraFrameSet
     ImageFrame ir_right;
     DepthFrame depth;
 
-    std::optional<ImuSample> imu;
+    std::optional<ImuBatch> imu;
 };
 ```
 
 The internal frame model is the contract between sensor acquisition and all later consumers.
+Accelerometer and gyroscope samples retain independent timestamps and rates; do not fabricate a
+same-time pair by combining whichever two values happened to arrive most recently.
 
 ---
 
@@ -1049,6 +1063,9 @@ camera:
 
   imu:
     enabled: true
+    accelerometer_fps: 100
+    gyroscope_fps: 200
+    queue_capacity: 512
 
 streaming:
   rtsp:

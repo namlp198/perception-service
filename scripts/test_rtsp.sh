@@ -13,11 +13,19 @@ if [[ -d "${local_library_path}" ]]; then
 fi
 
 if command -v ffprobe >/dev/null 2>&1; then
-    exec ffprobe -v error -rtsp_transport tcp -show_streams "${stream_url}"
+    exec timeout 8s ffprobe -v error -rw_timeout 5000000 -rtsp_transport tcp -show_streams \
+        "${stream_url}"
 fi
 if command -v gst-launch-1.0 >/dev/null 2>&1; then
-    exec gst-launch-1.0 rtspsrc location="${stream_url}" protocols=tcp latency=0 \
-        drop-on-latency=true ! rtph264depay ! h264parse ! fakesink sync=false
+    set +e
+    timeout 5s gst-launch-1.0 -q rtspsrc location="${stream_url}" protocols=tcp latency=0 \
+        drop-on-latency=true ! rtph264depay ! h264parse ! fakesink sync=false num-buffers=1
+    status=$?
+    set -e
+    if [[ "${status}" -eq 0 ]]; then
+        exit 0
+    fi
+    exit "${status}"
 fi
 
 echo "Neither ffprobe nor gst-launch-1.0 is available." >&2

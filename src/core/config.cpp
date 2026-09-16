@@ -39,7 +39,7 @@ void read_rtsp_stream(const YAML::Node& node, RtspStreamConfig& target) {
 }
 #endif
 
-}  // namespace
+} // namespace
 
 ServiceConfig load_config(const std::filesystem::path& path) {
     ServiceConfig config;
@@ -49,11 +49,20 @@ ServiceConfig load_config(const std::filesystem::path& path) {
     if (camera) {
         config.camera.type = camera["type"].as<std::string>(config.camera.type);
         config.camera.serial = camera["serial"].as<std::string>(config.camera.serial);
-        config.camera.imu_enabled = camera["imu"]["enabled"].as<bool>(config.camera.imu_enabled);
+        const YAML::Node imu = camera["imu"];
+        if (imu) {
+            config.camera.imu.enabled = imu["enabled"].as<bool>(config.camera.imu.enabled);
+            config.camera.imu.accelerometer_fps =
+                imu["accelerometer_fps"].as<int>(config.camera.imu.accelerometer_fps);
+            config.camera.imu.gyroscope_fps =
+                imu["gyroscope_fps"].as<int>(config.camera.imu.gyroscope_fps);
+            config.camera.imu.queue_capacity =
+                imu["queue_capacity"].as<std::size_t>(config.camera.imu.queue_capacity);
+        }
         config.camera.capture_timeout_ms =
             camera["capture_timeout_ms"].as<std::uint32_t>(config.camera.capture_timeout_ms);
-        config.camera.reconnect_interval_ms = camera["reconnect_interval_ms"].as<std::uint32_t>(
-            config.camera.reconnect_interval_ms);
+        config.camera.reconnect_interval_ms =
+            camera["reconnect_interval_ms"].as<std::uint32_t>(config.camera.reconnect_interval_ms);
         read_image_stream(camera["rgb"], config.camera.rgb);
         read_image_stream(camera["depth"], config.camera.depth);
         read_image_stream(camera["infrared_left"], config.camera.infrared_left);
@@ -84,8 +93,7 @@ ServiceConfig load_config(const std::filesystem::path& path) {
 
     const YAML::Node robot_agent = root["robot_agent"];
     if (robot_agent) {
-        config.robot_agent.enabled =
-            robot_agent["enabled"].as<bool>(config.robot_agent.enabled);
+        config.robot_agent.enabled = robot_agent["enabled"].as<bool>(config.robot_agent.enabled);
         config.robot_agent.host = robot_agent["host"].as<std::string>(config.robot_agent.host);
         config.robot_agent.port = robot_agent["port"].as<std::uint16_t>(config.robot_agent.port);
     }
@@ -105,6 +113,13 @@ void validate_config(const ServiceConfig& config) {
     validate_stream(config.camera.depth, "camera.depth");
     validate_stream(config.camera.infrared_left, "camera.infrared_left");
     validate_stream(config.camera.infrared_right, "camera.infrared_right");
+    if (config.camera.imu.enabled &&
+        (config.camera.imu.accelerometer_fps <= 0 || config.camera.imu.gyroscope_fps <= 0)) {
+        throw std::invalid_argument("camera.imu sample rates must be greater than zero");
+    }
+    if (config.camera.imu.queue_capacity < 32 || config.camera.imu.queue_capacity > 4'096) {
+        throw std::invalid_argument("camera.imu queue_capacity must be in the range 32..4096");
+    }
     if (config.camera.capture_timeout_ms == 0 || config.camera.reconnect_interval_ms == 0) {
         throw std::invalid_argument("camera timeout values must be greater than zero");
     }
@@ -115,11 +130,12 @@ void validate_config(const ServiceConfig& config) {
         throw std::invalid_argument("streaming queue_capacity must be in the range 2..3");
     }
     if (config.streaming.bitrate_kbps == 0 || config.streaming.keyframe_interval == 0) {
-        throw std::invalid_argument("streaming bitrate and keyframe interval must be greater than zero");
+        throw std::invalid_argument(
+            "streaming bitrate and keyframe interval must be greater than zero");
     }
     if (config.robot_agent.enabled && config.robot_agent.port == 0) {
         throw std::invalid_argument("robot_agent.port is intentionally unset; disable integration");
     }
 }
 
-}  // namespace perception::core
+} // namespace perception::core

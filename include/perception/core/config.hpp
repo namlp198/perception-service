@@ -14,6 +14,13 @@ struct ImageStreamConfig {
     int fps{30};
 };
 
+struct ImuConfig {
+    bool enabled{false};
+    int accelerometer_fps{100};
+    int gyroscope_fps{200};
+    std::size_t queue_capacity{512};
+};
+
 struct CameraConfig {
     std::string type{"realsense"};
     std::string serial;
@@ -21,7 +28,7 @@ struct CameraConfig {
     ImageStreamConfig depth;
     ImageStreamConfig infrared_left;
     ImageStreamConfig infrared_right;
-    bool imu_enabled{true};
+    ImuConfig imu;
     std::uint32_t capture_timeout_ms{1'000};
     std::uint32_t reconnect_interval_ms{2'000};
 };
@@ -61,4 +68,4 @@ struct ServiceConfig {
 [[nodiscard]] ServiceConfig load_config(const std::filesystem::path& path);
 void validate_config(const ServiceConfig& config);
 
-}  // namespace perception::core
+} // namespace perception::core

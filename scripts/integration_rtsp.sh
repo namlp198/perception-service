@@ -38,10 +38,10 @@ check_endpoint() {
     set +e
     timeout "${client_seconds}s" gst-launch-1.0 -q \
         rtspsrc location="${stream_url}" protocols=tcp latency=0 drop-on-latency=true \
-        ! rtph264depay ! h264parse ! fakesink sync=false
+        ! rtph264depay ! h264parse ! fakesink sync=false num-buffers=1
     local status=$?
     set -e
-    if [[ "${status}" -ne 0 && "${status}" -ne 124 ]]; then
+    if [[ "${status}" -ne 0 ]]; then
         echo "RTSP endpoint failed: ${stream_url}" >&2
         return 1
     fi

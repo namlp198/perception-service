@@ -1,14 +1,16 @@
 #pragma once
 
 #include "perception/camera/camera.hpp"
+#include "perception/camera/camera_info.hpp"
 #include "perception/core/config.hpp"
 
 #include <memory>
+#include <optional>
 
 namespace perception::camera {
 
 class RealSenseCamera final : public ICamera {
-public:
+  public:
     explicit RealSenseCamera(core::CameraConfig config);
     ~RealSenseCamera() override;
 
@@ -20,11 +22,14 @@ public:
     [[nodiscard]] bool initialize() override;
     [[nodiscard]] bool start() override;
     void stop() noexcept override;
+    void disable_imu() noexcept;
+    [[nodiscard]] bool imu_enabled() const noexcept;
     [[nodiscard]] bool capture(CameraFrameSet& frame_set) override;
+    [[nodiscard]] auto device_info() const -> std::optional<CameraDeviceInfo>;
 
-private:
+  private:
     class Impl;
     std::unique_ptr<Impl> impl_;
 };
 
-}  // namespace perception::camera
+} // namespace perception::camera

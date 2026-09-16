@@ -30,11 +30,23 @@ struct DepthFrame {
     std::vector<std::uint16_t> data;
 };
 
-struct ImuSample {
+struct AccelerometerSample {
     std::uint64_t sensor_timestamp_ns{};
     std::uint64_t capture_timestamp_ns{};
     std::array<float, 3> acceleration_mps2{};
+};
+
+struct GyroscopeSample {
+    std::uint64_t sensor_timestamp_ns{};
+    std::uint64_t capture_timestamp_ns{};
     std::array<float, 3> angular_velocity_rps{};
+};
+
+struct ImuBatch {
+    std::vector<AccelerometerSample> accelerometer;
+    std::vector<GyroscopeSample> gyroscope;
+    std::uint64_t accelerometer_dropped{};
+    std::uint64_t gyroscope_dropped{};
 };
 
 struct CameraFrameSet {
@@ -43,7 +55,7 @@ struct CameraFrameSet {
     ImageFrame ir_left;
     ImageFrame ir_right;
     DepthFrame depth;
-    std::optional<ImuSample> imu;
+    std::optional<ImuBatch> imu;
 };
 
-}  // namespace perception::camera
+} // namespace perception::camera

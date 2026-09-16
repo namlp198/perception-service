@@ -8,8 +8,10 @@ camera:
   infrared_left: { enabled: true, width: 640, height: 480, fps: 30 }
   infrared_right: { enabled: true, width: 640, height: 480, fps: 30 }
   imu:
-    # Video streaming is stable first; motion capture will move to a dedicated sensor callback.
-    enabled: false
+    enabled: true
+    accelerometer_fps: 100
+    gyroscope_fps: 200
+    queue_capacity: 512
 
 streaming:
   rtsp:

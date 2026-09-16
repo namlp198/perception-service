@@ -116,6 +116,9 @@ target_link_libraries(perception-service PRIVATE perception::core perception_war
 add_executable(camera-info app/tools/camera_info.cpp)
 target_link_libraries(camera-info PRIVATE perception::core perception_warnings)
 
+add_executable(imu-info app/tools/imu_info.cpp)
+target_link_libraries(imu-info PRIVATE perception::core perception_warnings)
+
 add_executable(stream-test app/tools/stream_test.cpp)
 target_link_libraries(stream-test PRIVATE perception::core perception_warnings)
 
@@ -130,5 +133,6 @@ if(BUILD_TESTING)
     add_subdirectory(tests)
 endif()
 
-install(TARGETS perception-service camera-info stream-test RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+install(TARGETS perception-service camera-info imu-info stream-test
+        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 install(DIRECTORY config/ DESTINATION ${CMAKE_INSTALL_SYSCONFDIR}/perception-service)

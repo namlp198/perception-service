@@ -17,10 +17,17 @@ bool CapturePipeline::run_once() {
         return false;
     }
     health_.record_frame(frame_set.capture_timestamp_ns);
+    if (frame_set.imu.has_value()) {
+        health_.record_imu(*frame_set.imu);
+    }
     return streaming_.publish(frame_set);
 }
 
-void CapturePipeline::request_stop() noexcept { stop_requested_ = true; }
-bool CapturePipeline::stop_requested() const noexcept { return stop_requested_; }
+void CapturePipeline::request_stop() noexcept {
+    stop_requested_ = true;
+}
+bool CapturePipeline::stop_requested() const noexcept {
+    return stop_requested_;
+}
 
-}  // namespace perception::pipeline
+} // namespace perception::pipeline
