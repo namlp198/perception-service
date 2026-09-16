@@ -6,6 +6,7 @@
 #include <filesystem>
 #include <iomanip>
 #include <iostream>
+#include <string>
 
 int main(int argc, char* argv[]) {
     const std::filesystem::path config_path =
@@ -18,6 +19,32 @@ int main(int argc, char* argv[]) {
 
     auto config = perception::core::load_config(config_path).camera;
     config.imu.enabled = true;
+    // Optional rate overrides let a field diagnostic try other exposed profile pairs (for
+    // example 200/200) without editing the production configuration.
+    if (argc > 3) {
+        config.imu.accelerometer_fps = std::atoi(argv[3]);
+    }
+    if (argc > 4) {
+        config.imu.gyroscope_fps = std::atoi(argv[4]);
+    }
+    const std::string video_mode = argc > 5 ? argv[5] : "video";
+    if (config.imu.accelerometer_fps <= 0 || config.imu.gyroscope_fps <= 0 ||
+        (video_mode != "video" && video_mode != "no-video")) {
+        std::cerr << "Usage: imu-info [config.yaml] [seconds] [accel_fps] [gyro_fps] "
+                     "[video|no-video]\n";
+        return 2;
+    }
+    // "no-video" opens only the Motion Module, isolating the IMU from any pipeline interaction.
+    if (video_mode == "no-video") {
+        config.rgb.enabled = false;
+        config.depth.enabled = false;
+        config.infrared_left.enabled = false;
+        config.infrared_right.enabled = false;
+    }
+    // A bounded diagnostic must observe one Motion Module session, not a restart cycle.
+    config.imu.restart_interval_ms = 0;
+    std::cout << "requested accel_fps=" << config.imu.accelerometer_fps
+              << " gyro_fps=" << config.imu.gyroscope_fps << " mode=" << video_mode << '\n';
     perception::camera::RealSenseCamera camera(config);
     if (!camera.initialize() || !camera.start()) {
         std::cerr

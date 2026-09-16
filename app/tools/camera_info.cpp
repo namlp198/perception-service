@@ -4,10 +4,16 @@
 #include <filesystem>
 #include <iomanip>
 #include <iostream>
+#include <string>
 
 int main(int argc, char* argv[]) {
     const std::filesystem::path config_path =
         argc > 1 ? std::filesystem::path(argv[1]) : std::filesystem::path("config/default.yaml");
+    const std::string action = argc > 2 ? argv[2] : "info";
+    if (action != "info" && action != "--hardware-reset") {
+        std::cerr << "Usage: camera-info [config.yaml] [--hardware-reset]\n";
+        return 2;
+    }
     const auto config = perception::core::load_config(config_path);
     perception::camera::RealSenseCamera camera(config.camera);
     if (!camera.initialize()) {
@@ -42,6 +48,15 @@ int main(int argc, char* argv[]) {
             std::cout << " intrinsics=unavailable";
         }
         std::cout << '\n';
+    }
+    if (action == "--hardware-reset") {
+        // Field recovery for a Motion Module that stays silent (motion_callbacks=0) until the
+        // camera re-enumerates; equivalent to a replug and only ever run by an operator.
+        if (!camera.hardware_reset()) {
+            std::cerr << "Hardware reset failed.\n";
+            return 3;
+        }
+        std::cout << "hardware_reset: issued; wait a few seconds for USB re-enumeration\n";
     }
     return 0;
 }
