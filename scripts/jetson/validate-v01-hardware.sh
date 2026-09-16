@@ -17,9 +17,9 @@ service_was_active=false
 service_restarted=false
 
 if [[ -d "${local_library_path}" ]]; then
-    export LD_LIBRARY_PATH="${local_library_path}${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
-    export GST_PLUGIN_PATH="${local_library_path}/gstreamer-1.0${GST_PLUGIN_PATH:+:${GST_PLUGIN_PATH}}"
+    export LD_LIBRARY_PATH="/usr/lib/aarch64-linux-gnu:${local_library_path}${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
 fi
+unset GST_PLUGIN_PATH
 
 systemctl --user daemon-reload
 
@@ -34,7 +34,7 @@ restore_service() {
         systemctl --user start "${service_name}" || true
         sleep 3
         systemctl --user --no-pager --full status "${service_name}" || true
-        journalctl --user --unit "${service_name}" --lines 30 --no-pager || true
+        journalctl --user-unit="${service_name}" --lines 30 --no-pager || true
     fi
 }
 trap restore_service EXIT
@@ -62,8 +62,14 @@ service_restarted=true
 sleep 5
 systemctl --user --no-pager --full status "${service_name}"
 
+echo "Confirming target H.264 encoder..."
+bash "${project_root}/scripts/jetson/validate-rtsp-encoder.sh"
+
 echo "Checking RGB and depth-visual RTSP endpoints..."
 "${project_root}/scripts/test_rtsp.sh" 127.0.0.1 /camera/rgb
 "${project_root}/scripts/test_rtsp.sh" 127.0.0.1 /camera/depth_visual
+
+echo "Checking strict running-service evidence..."
+bash "${project_root}/scripts/jetson/verify-running-service.sh"
 
 echo "V0.1 hardware acceptance completed successfully."

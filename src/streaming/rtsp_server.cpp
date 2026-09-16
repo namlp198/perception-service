@@ -22,7 +22,7 @@
 namespace perception::streaming {
 
 class RtspServer::Impl {
-public:
+  public:
     explicit Impl(core::StreamingConfig value) : config(std::move(value)) {}
 
     core::StreamingConfig config;
@@ -80,20 +80,26 @@ public:
                      << "nvv4l2h264enc maxperf-enable=true control-rate=1 bitrate="
                      << config.bitrate_kbps * 1'000U
                      << " iframeinterval=" << config.keyframe_interval
-                     << " idrinterval=" << config.keyframe_interval
-                     << " insert-sps-pps=true ! ";
+                     << " idrinterval=" << config.keyframe_interval << " insert-sps-pps=true ! ";
 #if defined(PERCEPTION_HAS_SPDLOG)
             spdlog::info("RTSP using Jetson hardware H.264 encoder");
 #endif
         } else {
             if (config.hardware_encoder && !config.allow_software_fallback) {
+#if defined(PERCEPTION_HAS_SPDLOG)
+                spdlog::error("Required Jetson H.264 encoder nvv4l2h264enc is unavailable");
+#endif
                 return {};
             }
             pipeline << "x264enc tune=zerolatency speed-preset=ultrafast bitrate="
                      << config.bitrate_kbps << " key-int-max=" << config.keyframe_interval
                      << " bframes=0 sliced-threads=true ! ";
 #if defined(PERCEPTION_HAS_SPDLOG)
-            spdlog::warn("Jetson H.264 encoder unavailable; using x264 low-latency fallback");
+            if (config.hardware_encoder) {
+                spdlog::warn("Jetson H.264 encoder unavailable; using x264 low-latency fallback");
+            } else {
+                spdlog::info("RTSP using x264 low-latency software encoder for Orin Nano");
+            }
 #endif
         }
 
@@ -140,7 +146,9 @@ public:
 
 RtspServer::RtspServer(core::StreamingConfig config)
     : impl_(std::make_unique<Impl>(std::move(config))) {}
-RtspServer::~RtspServer() { stop(); }
+RtspServer::~RtspServer() {
+    stop();
+}
 RtspServer::RtspServer(RtspServer&&) noexcept = default;
 auto RtspServer::operator=(RtspServer&&) noexcept -> RtspServer& = default;
 
@@ -267,4 +275,4 @@ bool RtspServer::publish(StreamId stream, const camera::ImageFrame& frame) {
 #endif
 }
 
-}  // namespace perception::streaming
+} // namespace perception::streaming

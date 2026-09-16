@@ -28,8 +28,8 @@ for package_name in "${required_cmake_packages[@]}"; do
     fi
 done
 
-if ! gst-inspect-1.0 nvv4l2h264enc >/dev/null 2>&1; then
-    echo "missing Jetson GStreamer element: nvv4l2h264enc" >&2
+if ! bash "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/jetson/validate-rtsp-encoder.sh"; then
+    echo "Jetson Orin Nano H.264 encoder preflight failed" >&2
     missing=1
 fi
 

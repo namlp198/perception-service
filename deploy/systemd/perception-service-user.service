@@ -6,11 +6,13 @@ Wants=network-online.target
 [Service]
 Type=simple
 WorkingDirectory=/home/percpc/workspace/perception-service
-Environment=LD_LIBRARY_PATH=/home/percpc/workspace/perception-service/.runtime/sysroot/usr/lib/aarch64-linux-gnu
-Environment=GST_PLUGIN_PATH=/home/percpc/workspace/perception-service/.runtime/sysroot/usr/lib/aarch64-linux-gnu/gstreamer-1.0
+Environment=LD_LIBRARY_PATH=/usr/lib/aarch64-linux-gnu:/home/percpc/workspace/perception-service/.runtime/sysroot/usr/lib/aarch64-linux-gnu
+Environment=GST_REGISTRY_1_0=/home/percpc/workspace/perception-service/.runtime/gstreamer-registry.bin
+ExecStartPre=/usr/bin/bash /home/percpc/workspace/perception-service/scripts/jetson/validate-rtsp-encoder.sh
 ExecStart=/home/percpc/workspace/perception-service/build/jetson-local/perception-service /home/percpc/workspace/perception-service/config/default.yaml
 Restart=on-failure
 RestartSec=2s
+TimeoutStartSec=45s
 TimeoutStopSec=10s
 KillSignal=SIGTERM
 

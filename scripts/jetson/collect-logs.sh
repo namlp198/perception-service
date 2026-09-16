@@ -7,4 +7,4 @@ if [[ ! "${line_count}" =~ ^[1-9][0-9]*$ ]] || ((line_count > 5000)); then
     exit 2
 fi
 
-journalctl --user -u perception-service-user.service -n "${line_count}" --no-pager
+journalctl --user-unit=perception-service-user.service -n "${line_count}" --no-pager

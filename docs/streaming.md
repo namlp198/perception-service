@@ -12,12 +12,12 @@ rtsp://<JETSON_IP>:8554/camera/depth_visual
 
 Optional later endpoints include `/debug/terrain` and `/debug/vo`.
 
-The preferred production path is
-`appsrc -> videoconvert -> nvvidconv -> NVMM -> nvv4l2h264enc -> h264parse -> rtph264pay` via GStreamer
-and gst-rtsp-server. When the Jetson encoder element is unavailable and
-`allow_software_fallback: true`, the service selects `x264enc tune=zerolatency speed-preset=ultrafast`
-and logs the downgrade. Hardware encoding must be verified rather than inferred from a pipeline
-string. Frames enter a bounded fresh-data queue; a slow encoder drops the oldest frame.
+The deployed target is a Jetson Orin Nano, which has no hardware video encoder. Its production path is
+`appsrc -> videoconvert -> x264enc -> h264parse -> rtph264pay` via GStreamer and gst-rtsp-server.
+The user unit runs a real low-latency x264 encode probe before startup. The optional
+`nvvidconv -> NVMM -> nvv4l2h264enc` path remains available in source for Orin NX/AGX targets that
+actually contain NVENC. Frames enter a bounded fresh-data queue; a slow encoder drops the oldest
+frame.
 
 Low-latency client example:
 
