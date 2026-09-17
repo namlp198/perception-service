@@ -54,6 +54,9 @@ struct StreamingConfig {
     std::uint32_t bitrate_kbps{4'000};
     std::uint32_t keyframe_interval{30};
     std::size_t queue_capacity{3};
+    // A client that vanishes without TEARDOWN keeps its transport on the shared media until its
+    // session expires; a dead TCP transport back-pressures every other viewer of that mount.
+    std::uint32_t session_timeout_s{20};
     RtspStreamConfig rgb{true, "/camera/rgb", 0.2F, 5.0F};
     RtspStreamConfig infrared_left{false, "/camera/ir_left", 0.2F, 5.0F};
     RtspStreamConfig infrared_right{false, "/camera/ir_right", 0.2F, 5.0F};

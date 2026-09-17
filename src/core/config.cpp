@@ -93,6 +93,8 @@ ServiceConfig load_config(const std::filesystem::path& path) {
             rtsp["keyframe_interval"].as<std::uint32_t>(config.streaming.keyframe_interval);
         config.streaming.queue_capacity =
             rtsp["queue_capacity"].as<std::size_t>(config.streaming.queue_capacity);
+        config.streaming.session_timeout_s =
+            rtsp["session_timeout_s"].as<std::uint32_t>(config.streaming.session_timeout_s);
         read_rtsp_stream(rtsp["rgb"], config.streaming.rgb);
         read_rtsp_stream(rtsp["infrared_left"], config.streaming.infrared_left);
         read_rtsp_stream(rtsp["infrared_right"], config.streaming.infrared_right);
@@ -146,6 +148,9 @@ void validate_config(const ServiceConfig& config) {
     }
     if (config.streaming.queue_capacity < 2 || config.streaming.queue_capacity > 3) {
         throw std::invalid_argument("streaming queue_capacity must be in the range 2..3");
+    }
+    if (config.streaming.session_timeout_s < 5 || config.streaming.session_timeout_s > 300) {
+        throw std::invalid_argument("streaming session_timeout_s must be in the range 5..300");
     }
     if (config.streaming.bitrate_kbps == 0 || config.streaming.keyframe_interval == 0) {
         throw std::invalid_argument(

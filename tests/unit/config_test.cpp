@@ -19,6 +19,19 @@ auto config_test() -> bool {
     CHECK_TRUE(config.camera.imu.startup_timeout_ms == 2'000);
     CHECK_TRUE(config.camera.imu.liveness_timeout_ms == 1'000);
     CHECK_TRUE(config.camera.imu.restart_interval_ms == 30'000);
+    CHECK_TRUE(config.streaming.session_timeout_s == 20);
+
+    // Sessions must expire quickly enough to release a dead client's transport, but never so
+    // fast that a healthy client's keep-alive cadence is treated as death.
+    config.streaming.session_timeout_s = 4;
+    bool session_rejected = false;
+    try {
+        perception::core::validate_config(config);
+    } catch (const std::invalid_argument&) {
+        session_rejected = true;
+    }
+    CHECK_TRUE(session_rejected);
+    config.streaming.session_timeout_s = 20;
 
     // A retry cadence faster than the startup proof window would restart the Motion Module
     // before it can ever be judged, so it is rejected; 0 disables retries.

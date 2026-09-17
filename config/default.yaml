@@ -26,6 +26,7 @@ streaming:
     bitrate_kbps: 4000
     keyframe_interval: 30
     queue_capacity: 3
+    session_timeout_s: 20
     rgb: { enabled: true, path: "/camera/rgb" }
     infrared_left: { enabled: false, path: "/camera/ir_left" }
     infrared_right: { enabled: false, path: "/camera/ir_right" }

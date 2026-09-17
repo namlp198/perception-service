@@ -24,6 +24,16 @@ streaming` followed at once by `full`) can land in that window even though `stre
 keeps rising. Note that `stream.frames_published` counts frames handed to the RTSP path whether or
 not a client is attached, so it never proves that a client received media — only the probe does.
 
+A mount that fails the probe three times (`status 124`) while the other mount passes and
+`stream.frames_published` keeps rising is a stalled shared media, not a capture fault. Seen
+2026-09-17 on `/camera/depth_visual`: viewers that die without TEARDOWN (an operator app killed or
+crashed, Wi-Fi loss) keep their transport on the shared media; gst-rtsp-server never expires
+sessions by itself, and a dead TCP transport back-pressures the media for every later client. The
+server now expires idle sessions every 2 s with `streaming.rtsp.session_timeout_s` (default 20,
+5..300) and logs `RTSP expired N client session(s) that left without TEARDOWN`; a stall therefore
+self-heals within the timeout. Before that build the only recovery was
+`systemctl --user restart perception-service-user.service`.
+
 Camera ownership is exclusive during diagnostics. Do not run RealSense Viewer, `camera-info` or
 `imu-info` alongside the service. For the bounded maintenance workflow that restores the previously
 active service even when a diagnostic fails:

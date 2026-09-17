@@ -31,7 +31,13 @@ TEST(Config, RejectsQueueOutsideFreshDataRange) {
     EXPECT_EQ(config.camera.imu.startup_timeout_ms, 2'000U);
     EXPECT_EQ(config.camera.imu.liveness_timeout_ms, 1'000U);
     EXPECT_EQ(config.camera.imu.restart_interval_ms, 30'000U);
+    EXPECT_EQ(config.streaming.session_timeout_s, 20U);
     EXPECT_NO_THROW(perception::core::validate_config(config));
+    // Sessions must expire fast enough to release a dead client's transport, not faster than
+    // a healthy client's keep-alive cadence.
+    config.streaming.session_timeout_s = 4;
+    EXPECT_THROW(perception::core::validate_config(config), std::invalid_argument);
+    config.streaming.session_timeout_s = 20;
     // A Motion Module retry faster than the startup proof window is rejected; 0 disables retries.
     config.camera.imu.restart_interval_ms = 1'000;
     EXPECT_THROW(perception::core::validate_config(config), std::invalid_argument);

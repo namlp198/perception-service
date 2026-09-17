@@ -40,6 +40,34 @@ class RtspServer::Impl {
     GMainLoop* main_loop{nullptr};
     GstRTSPServer* server{nullptr};
     guint server_source_id{0};
+    guint session_cleanup_source_id{0};
+
+    // gst-rtsp-server never expires sessions on its own. A viewer that dies without TEARDOWN
+    // (crash, kill, Wi-Fi loss) leaves its transport attached to the shared media of that
+    // mount; a dead TCP transport fills its send backlog and back-pressures the whole media,
+    // so every later client of the mount receives nothing while the service keeps publishing.
+    // Expiring such sessions releases the transport and, once unused, the media itself.
+    static gboolean cleanup_sessions(gpointer user_data) {
+        auto* server = static_cast<GstRTSPServer*>(user_data);
+        GstRTSPSessionPool* pool = gst_rtsp_server_get_session_pool(server);
+        const guint removed = gst_rtsp_session_pool_cleanup(pool);
+        g_object_unref(pool);
+#if defined(PERCEPTION_HAS_SPDLOG)
+        if (removed > 0) {
+            spdlog::warn("RTSP expired {} client session(s) that left without TEARDOWN", removed);
+        }
+#endif
+        return G_SOURCE_CONTINUE;
+    }
+
+    static void on_new_session(GstRTSPClient*, GstRTSPSession* session, gpointer user_data) {
+        const auto timeout_s = static_cast<guint>(GPOINTER_TO_UINT(user_data));
+        gst_rtsp_session_set_timeout(session, timeout_s);
+    }
+
+    static void on_client_connected(GstRTSPServer*, GstRTSPClient* client, gpointer user_data) {
+        g_signal_connect(client, "new-session", G_CALLBACK(on_new_session), user_data);
+    }
     std::thread main_loop_thread;
     std::map<StreamId, std::unique_ptr<MountContext>> mounts;
 
@@ -188,6 +216,14 @@ bool RtspServer::start() {
         stop();
         return false;
     }
+    g_signal_connect(impl_->server, "client-connected", G_CALLBACK(Impl::on_client_connected),
+                     GUINT_TO_POINTER(impl_->config.session_timeout_s));
+    impl_->session_cleanup_source_id =
+        g_timeout_add_seconds(2, Impl::cleanup_sessions, impl_->server);
+#if defined(PERCEPTION_HAS_SPDLOG)
+    spdlog::info("RTSP session timeout={} s; dead client sessions are expired every 2 s",
+                 impl_->config.session_timeout_s);
+#endif
     impl_->running = true;
     impl_->main_loop_thread = std::thread([this] { g_main_loop_run(impl_->main_loop); });
     return true;
@@ -203,6 +239,10 @@ void RtspServer::stop() noexcept {
     }
     if (impl_->main_loop_thread.joinable()) {
         impl_->main_loop_thread.join();
+    }
+    if (impl_->session_cleanup_source_id != 0) {
+        g_source_remove(impl_->session_cleanup_source_id);
+        impl_->session_cleanup_source_id = 0;
     }
     if (impl_->server_source_id != 0) {
         g_source_remove(impl_->server_source_id);
