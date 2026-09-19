@@ -12,7 +12,8 @@ else()
         unit/camera_health_test.cpp
         unit/depth_visualizer_test.cpp
         unit/transport_test.cpp
-        unit/http_test.cpp)
+        unit/http_test.cpp
+        unit/geometry_test.cpp)
     target_link_libraries(perception-unit-tests PRIVATE perception::core perception_warnings)
 endif()
 add_test(NAME perception-unit-tests COMMAND perception-unit-tests)

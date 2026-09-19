@@ -159,6 +159,30 @@ ServiceConfig load_config(const std::filesystem::path& path) {
         read_peer_poll(transport["payload_service"], config.transport.payload_service);
         read_peer_poll(transport["robot_agent_status"], config.transport.robot_agent_status);
     }
+
+    const YAML::Node geometry = root["geometry"];
+    if (geometry) {
+        const YAML::Node mount = geometry["camera_mount"];
+        if (mount) {
+            config.geometry.camera_x_m = mount["x_m"].as<double>(config.geometry.camera_x_m);
+            config.geometry.camera_y_m = mount["y_m"].as<double>(config.geometry.camera_y_m);
+            config.geometry.camera_z_m = mount["z_m"].as<double>(config.geometry.camera_z_m);
+            config.geometry.camera_roll_deg =
+                mount["roll_deg"].as<double>(config.geometry.camera_roll_deg);
+            config.geometry.camera_pitch_deg =
+                mount["pitch_deg"].as<double>(config.geometry.camera_pitch_deg);
+            config.geometry.camera_yaw_deg =
+                mount["yaw_deg"].as<double>(config.geometry.camera_yaw_deg);
+        }
+        const YAML::Node cloud = geometry["point_cloud"];
+        if (cloud) {
+            config.geometry.min_range_m = cloud["min_range_m"].as<double>(config.geometry.min_range_m);
+            config.geometry.max_range_m = cloud["max_range_m"].as<double>(config.geometry.max_range_m);
+            config.geometry.row_stride = cloud["row_stride"].as<int>(config.geometry.row_stride);
+            config.geometry.column_stride =
+                cloud["column_stride"].as<int>(config.geometry.column_stride);
+        }
+    }
 #else
     (void)path;
     throw std::runtime_error("yaml-cpp support was not available when the service was built");
@@ -238,6 +262,23 @@ void validate_config(const ServiceConfig& config) {
     }
     validate_peer_poll(config.transport.payload_service, "transport.payload_service");
     validate_peer_poll(config.transport.robot_agent_status, "transport.robot_agent_status");
+
+    if (config.geometry.min_range_m < 0.0 ||
+        config.geometry.max_range_m <= config.geometry.min_range_m) {
+        throw std::invalid_argument(
+            "geometry.point_cloud max_range_m must be greater than min_range_m >= 0");
+    }
+    if (config.geometry.row_stride < 1 || config.geometry.column_stride < 1) {
+        throw std::invalid_argument("geometry.point_cloud strides must be at least 1");
+    }
+    // A mount angle outside one turn is a data-entry error, not an exotic installation.
+    const double angles[] = {config.geometry.camera_roll_deg, config.geometry.camera_pitch_deg,
+                             config.geometry.camera_yaw_deg};
+    for (const double angle : angles) {
+        if (angle < -360.0 || angle > 360.0) {
+            throw std::invalid_argument("geometry.camera_mount angles must be within +/-360 deg");
+        }
+    }
 }
 
 } // namespace perception::core

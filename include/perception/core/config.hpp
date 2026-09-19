@@ -96,11 +96,28 @@ struct TransportConfig {
     PeerPollConfig robot_agent_status{false, "192.168.1.206", 5'080, 200, 1'000, 2'000};
 };
 
+// Where the camera body sits on the robot, and how depth is turned into robot-frame points.
+// These are survey values, not tuning knobs: a wrong mount silently rotates or shifts every point
+// the perception and localization branches consume.
+struct GeometryConfig {
+    double camera_x_m{0.0};
+    double camera_y_m{0.0};
+    double camera_z_m{0.0};
+    double camera_roll_deg{0.0};
+    double camera_pitch_deg{0.0};
+    double camera_yaw_deg{0.0};
+    double min_range_m{0.2};
+    double max_range_m{5.0};
+    int row_stride{1};
+    int column_stride{1};
+};
+
 struct ServiceConfig {
     CameraConfig camera;
     StreamingConfig streaming;
     RobotAgentConfig robot_agent;
     TransportConfig transport;
+    GeometryConfig geometry;
 };
 
 [[nodiscard]] ServiceConfig load_config(const std::filesystem::path& path);

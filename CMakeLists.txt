@@ -47,7 +47,9 @@ add_library(
     src/transport/http.cpp
     src/transport/remote_inputs.cpp
     src/transport/service_state_provider.cpp
-    src/transport/tcp_json_server.cpp)
+    src/transport/tcp_json_server.cpp
+    src/geometry/transform.cpp
+    src/geometry/point_cloud.cpp)
 add_library(perception::core ALIAS perception_core)
 
 target_include_directories(
@@ -131,6 +133,8 @@ target_link_libraries(camera-info PRIVATE perception::core perception_warnings)
 
 add_executable(imu-info app/tools/imu_info.cpp)
 target_link_libraries(imu-info PRIVATE perception::core perception_warnings)
+
+
 
 add_executable(stream-test app/tools/stream_test.cpp)
 target_link_libraries(stream-test PRIVATE perception::core perception_warnings)

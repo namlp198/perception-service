@@ -66,3 +66,22 @@ transport:
     poll_interval_ms: 200
     request_timeout_ms: 1000
     staleness_timeout_ms: 2000
+
+# Rigid geometry of the sensor on the robot. These are survey values, not tuning knobs: a wrong
+# mount silently rotates or shifts every point the perception and localization branches consume.
+# Angles follow the same Z-Y-X (yaw, pitch, roll) convention as the vendor's attitude report, and
+# describe the camera BODY frame (x forward, y left, z up) relative to base_link. The fixed optical
+# -> body axis swap is applied in code, not configured here.
+geometry:
+  camera_mount:
+    x_m: 0.0
+    y_m: 0.0
+    z_m: 0.0
+    roll_deg: 0.0
+    pitch_deg: 0.0
+    yaw_deg: 0.0
+  point_cloud:
+    min_range_m: 0.2
+    max_range_m: 5.0
+    row_stride: 1
+    column_stride: 1

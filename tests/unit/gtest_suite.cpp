@@ -1,5 +1,7 @@
 #include "perception/core/bounded_queue.hpp"
 #include "perception/core/config.hpp"
+#include "perception/geometry/point_cloud.hpp"
+#include "perception/geometry/transform.hpp"
 #include "perception/health/camera_health.hpp"
 #include "perception/streaming/depth_visualizer.hpp"
 #include "perception/transport/http.hpp"
@@ -329,3 +331,58 @@ TEST(TransportProtocol, TreatsHalfPresentVendorVelocityAsMissing) {
     EXPECT_FALSE(sample->has_velocity);
 }
 
+TEST(Geometry, MapsOpticalAxesOntoRobotAxes) {
+    const auto optical_to_body = perception::geometry::camera_optical_to_camera_body();
+    const auto forward = optical_to_body.apply(perception::geometry::Vec3{0.0, 0.0, 1.0});
+    EXPECT_NEAR(forward.x, 1.0, 1e-9);
+    EXPECT_NEAR(forward.y, 0.0, 1e-9);
+    EXPECT_NEAR(forward.z, 0.0, 1e-9);
+
+    const auto right = optical_to_body.apply(perception::geometry::Vec3{1.0, 0.0, 0.0});
+    EXPECT_NEAR(right.y, -1.0, 1e-9);
+}
+
+TEST(Geometry, InverseRoundTripsAndCompositionIsOrdered) {
+    const auto transform = perception::geometry::Transform3::from_euler_translation(
+        perception::geometry::degrees_to_radians(10.0),
+        perception::geometry::degrees_to_radians(-20.0),
+        perception::geometry::degrees_to_radians(35.0),
+        perception::geometry::Vec3{0.3, -0.15, 0.42});
+    const perception::geometry::Vec3 original{1.25, -0.75, 2.5};
+    const auto back = transform.inverse().apply(transform.apply(original));
+    EXPECT_NEAR(back.x, original.x, 1e-9);
+    EXPECT_NEAR(back.y, original.y, 1e-9);
+    EXPECT_NEAR(back.z, original.z, 1e-9);
+}
+
+TEST(Geometry, DeprojectionDropsInvalidAndOutOfRangeDepth) {
+    perception::camera::DepthFrame depth;
+    depth.width = 4;
+    depth.height = 2;
+    depth.depth_scale_m = 0.001F;
+    depth.data = {0U, 1'000U, 100U, 9'000U, 2'000U, 500U, 0U, 3'000U};
+
+    perception::camera::CameraIntrinsics intrinsics;
+    intrinsics.width = 4;
+    intrinsics.height = 2;
+    intrinsics.focal_x = 2.0F;
+    intrinsics.focal_y = 2.0F;
+    intrinsics.principal_x = 2.0F;
+    intrinsics.principal_y = 1.0F;
+
+    perception::geometry::DeprojectOptions options;
+    options.min_range_m = 0.2;
+    options.max_range_m = 5.0;
+    const auto cloud = perception::geometry::deproject_depth(depth, intrinsics, options);
+    EXPECT_EQ(cloud.points.size(), 4U);
+    EXPECT_EQ(cloud.rejected_invalid, 2U);
+    EXPECT_EQ(cloud.rejected_out_of_range, 2U);
+    EXPECT_EQ(cloud.frame_id, "camera_optical");
+}
+
+TEST(Config, RejectsInvalidPointCloudRange) {
+    perception::core::ServiceConfig config;
+    config.geometry.min_range_m = 3.0;
+    config.geometry.max_range_m = 1.0;
+    EXPECT_THROW(perception::core::validate_config(config), std::invalid_argument);
+}

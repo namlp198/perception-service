@@ -6,11 +6,13 @@ auto camera_health_test() -> bool;
 auto depth_visualizer_test() -> bool;
 auto transport_test() -> bool;
 auto http_test() -> bool;
+auto geometry_test() -> bool;
 
 int main() {
     const bool passed =
         bounded_queue_test() && config_test() && camera_health_test() &&
-        depth_visualizer_test() && transport_test() && http_test();
+        depth_visualizer_test() && transport_test() && http_test() &&
+        geometry_test();
     if (!passed) {
         return 1;
     }
