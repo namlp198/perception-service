@@ -1,5 +1,6 @@
 #include "perception/core/bounded_queue.hpp"
 #include "perception/core/config.hpp"
+#include "perception/dataset/dataset.hpp"
 #include "perception/geometry/point_cloud.hpp"
 #include "perception/geometry/transform.hpp"
 #include "perception/health/camera_health.hpp"
@@ -11,6 +12,8 @@
 #include <gtest/gtest.h>
 
 #include <chrono>
+#include <filesystem>
+#include <system_error>
 #include <stdexcept>
 #include <string>
 
@@ -380,9 +383,104 @@ TEST(Geometry, DeprojectionDropsInvalidAndOutOfRangeDepth) {
     EXPECT_EQ(cloud.frame_id, "camera_optical");
 }
 
+TEST(Dataset, RoundTripsDepthBitExactlyAndReplaysThroughTheCameraInterface) {
+    std::error_code filesystem_error;
+    const auto directory =
+        std::filesystem::temp_directory_path(filesystem_error) / "perception-dataset-gtest";
+    std::filesystem::remove_all(directory, filesystem_error);
+
+    perception::dataset::DatasetManifest manifest;
+    manifest.created_utc = "2026-09-19T12:00:00Z";
+    manifest.device.serial = "207122078394";
+    manifest.device.depth_scale_m = 0.001F;
+
+    perception::camera::CameraFrameSet written;
+    written.capture_timestamp_ns = 1'000'000;
+    written.depth.width = 4;
+    written.depth.height = 2;
+    written.depth.depth_scale_m = 0.001F;
+    written.depth.data = {0U, 1'000U, 100U, 9'000U, 2'000U, 500U, 0U, 65'535U};
+    written.rgb.width = 2;
+    written.rgb.height = 1;
+    written.rgb.stride_bytes = 6;
+    written.rgb.data = {9U, 1U, 2U, 3U, 4U, 255U};
+
+    std::string error;
+    {
+        perception::dataset::DatasetWriter writer;
+        ASSERT_TRUE(writer.open(directory, manifest, error)) << error;
+        ASSERT_TRUE(writer.append(written, error)) << error;
+        ASSERT_TRUE(writer.close(error)) << error;
+    }
+
+    perception::dataset::ReplayCamera replay(directory, {});
+    perception::camera::ICamera& as_camera = replay;
+    ASSERT_TRUE(as_camera.initialize());
+    ASSERT_TRUE(as_camera.start());
+
+    perception::camera::CameraFrameSet read_back;
+    ASSERT_TRUE(as_camera.capture(read_back));
+    // Metric Z16 is measurement data and must survive bit-exact, 65535 included.
+    EXPECT_EQ(read_back.depth.data, written.depth.data);
+    EXPECT_EQ(read_back.rgb.data, written.rgb.data);
+    EXPECT_EQ(read_back.capture_timestamp_ns, written.capture_timestamp_ns);
+    // A finished dataset reports exhaustion instead of repeating its last frame.
+    EXPECT_FALSE(as_camera.capture(read_back));
+    as_camera.stop();
+
+    std::filesystem::remove_all(directory, filesystem_error);
+}
+
+TEST(Dataset, RefusesToOverwriteAnExistingRecording) {
+    std::error_code filesystem_error;
+    const auto directory =
+        std::filesystem::temp_directory_path(filesystem_error) / "perception-dataset-gtest-2";
+    std::filesystem::remove_all(directory, filesystem_error);
+
+    perception::dataset::DatasetManifest manifest;
+    manifest.created_utc = "2026-09-19T12:00:00Z";
+    std::string error;
+    perception::dataset::DatasetWriter first;
+    ASSERT_TRUE(first.open(directory, manifest, error)) << error;
+    ASSERT_TRUE(first.close(error)) << error;
+
+    perception::dataset::DatasetWriter second;
+    EXPECT_FALSE(second.open(directory, manifest, error));
+    EXPECT_FALSE(error.empty());
+
+    std::filesystem::remove_all(directory, filesystem_error);
+}
+
 TEST(Config, RejectsInvalidPointCloudRange) {
     perception::core::ServiceConfig config;
     config.geometry.min_range_m = 3.0;
     config.geometry.max_range_m = 1.0;
     EXPECT_THROW(perception::core::validate_config(config), std::invalid_argument);
+}
+
+TEST(Dataset, SelectsIntrinsicsRegardlessOfStreamNameCase) {
+    // librealsense names streams "Color"/"Depth"; a literal lower-case comparison matched nothing
+    // and produced a 30 s field recording with no intrinsics.
+    perception::camera::CameraDeviceInfo device;
+    perception::camera::CameraStreamProfileInfo depth;
+    depth.stream = "Depth";
+    depth.width = 640;
+    depth.height = 480;
+    perception::camera::CameraIntrinsics intrinsics;
+    intrinsics.focal_x = 380.0F;
+    depth.intrinsics = intrinsics;
+    device.stream_profiles.push_back(depth);
+
+    bool exact = false;
+    const auto selected =
+        perception::dataset::select_stream_intrinsics(device, "depth", 640, 480, &exact);
+    ASSERT_TRUE(selected.has_value());
+    EXPECT_TRUE(exact);
+    EXPECT_FLOAT_EQ(selected->focal_x, 380.0F);
+
+    // A resolution mismatch still returns intrinsics but reports that they are not the right ones.
+    const auto fallback =
+        perception::dataset::select_stream_intrinsics(device, "DEPTH", 1'280, 720, &exact);
+    ASSERT_TRUE(fallback.has_value());
+    EXPECT_FALSE(exact);
 }

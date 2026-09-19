@@ -49,7 +49,8 @@ add_library(
     src/transport/service_state_provider.cpp
     src/transport/tcp_json_server.cpp
     src/geometry/transform.cpp
-    src/geometry/point_cloud.cpp)
+    src/geometry/point_cloud.cpp
+    src/dataset/dataset.cpp)
 add_library(perception::core ALIAS perception_core)
 
 target_include_directories(
@@ -134,7 +135,11 @@ target_link_libraries(camera-info PRIVATE perception::core perception_warnings)
 add_executable(imu-info app/tools/imu_info.cpp)
 target_link_libraries(imu-info PRIVATE perception::core perception_warnings)
 
+add_executable(dataset-record app/tools/dataset_record.cpp)
+target_link_libraries(dataset-record PRIVATE perception::core perception_warnings)
 
+add_executable(dataset-info app/tools/dataset_info.cpp)
+target_link_libraries(dataset-info PRIVATE perception::core perception_warnings)
 
 add_executable(stream-test app/tools/stream_test.cpp)
 target_link_libraries(stream-test PRIVATE perception::core perception_warnings)
@@ -150,6 +155,6 @@ if(BUILD_TESTING)
     add_subdirectory(tests)
 endif()
 
-install(TARGETS perception-service camera-info imu-info stream-test
+install(TARGETS perception-service camera-info imu-info stream-test dataset-record dataset-info
         RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 install(DIRECTORY config/ DESTINATION ${CMAKE_INSTALL_SYSCONFDIR}/perception-service)
