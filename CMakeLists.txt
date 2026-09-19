@@ -41,7 +41,13 @@ add_library(
     src/streaming/rtsp_server.cpp
     src/streaming/stream_manager.cpp
     src/pipeline/capture_pipeline.cpp
-    src/health/camera_health.cpp)
+    src/health/camera_health.cpp
+    src/transport/json.cpp
+    src/transport/protocol.cpp
+    src/transport/http.cpp
+    src/transport/remote_inputs.cpp
+    src/transport/service_state_provider.cpp
+    src/transport/tcp_json_server.cpp)
 add_library(perception::core ALIAS perception_core)
 
 target_include_directories(
@@ -49,6 +55,12 @@ target_include_directories(
     PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
            $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
 target_link_libraries(perception_core PRIVATE perception_warnings)
+
+# The transport server and the two peer pollers own threads inside perception_core. Ubuntu 22.04's
+# glibc folds pthread into libc, but the dependency is declared rather than assumed.
+set(THREADS_PREFER_PTHREAD_FLAG ON)
+find_package(Threads REQUIRED)
+target_link_libraries(perception_core PUBLIC Threads::Threads)
 
 if(PERCEPTION_REQUIRE_PRODUCTION_DEPENDENCIES)
     find_package(spdlog REQUIRED)

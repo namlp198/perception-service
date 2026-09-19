@@ -36,3 +36,33 @@ robot_agent:
   enabled: false
   host: "192.168.1.206"
   port: 0
+
+# Typed, versioned perception <-> mission boundary (protocol version 1).
+#
+# The listener is enabled: it is inert until something calls it and it answers health and
+# localization queries. The two poll clients stay disabled because enabling them adds a 5 Hz request
+# load to live mission services (payload-service serves the robot's RTK, robot-agent runs missions)
+# for a consumer that does not exist until the V0.5 EKF. Enable them deliberately, per test.
+transport:
+  enabled: true
+  bind_address: "0.0.0.0"
+  port: 50053
+  request_timeout_ms: 5000
+  max_request_bytes: 65536
+  # GNSS/RTK is read straight from payload-service. Routing it through robot-agent would add a
+  # second hop to the one measurement whose timestamp and age the state estimator depends on.
+  payload_service:
+    enabled: false
+    host: "192.168.1.206"
+    port: 50052
+    poll_interval_ms: 200
+    request_timeout_ms: 1000
+    staleness_timeout_ms: 2000
+  # Vendor heading/odometry still comes from robot-agent, which owns the quadruped link.
+  robot_agent_status:
+    enabled: false
+    host: "192.168.1.206"
+    port: 5080
+    poll_interval_ms: 200
+    request_timeout_ms: 1000
+    staleness_timeout_ms: 2000

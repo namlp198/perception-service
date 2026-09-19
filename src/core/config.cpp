@@ -39,7 +39,45 @@ void read_rtsp_stream(const YAML::Node& node, RtspStreamConfig& target) {
     target.min_distance_m = node["min_distance_m"].as<float>(target.min_distance_m);
     target.max_distance_m = node["max_distance_m"].as<float>(target.max_distance_m);
 }
+
+void read_peer_poll(const YAML::Node& node, PeerPollConfig& target) {
+    if (!node) {
+        return;
+    }
+    target.enabled = node["enabled"].as<bool>(target.enabled);
+    target.host = node["host"].as<std::string>(target.host);
+    target.port = node["port"].as<std::uint16_t>(target.port);
+    target.poll_interval_ms = node["poll_interval_ms"].as<std::uint32_t>(target.poll_interval_ms);
+    target.request_timeout_ms =
+        node["request_timeout_ms"].as<std::uint32_t>(target.request_timeout_ms);
+    target.staleness_timeout_ms =
+        node["staleness_timeout_ms"].as<std::uint32_t>(target.staleness_timeout_ms);
+}
 #endif
+
+void validate_peer_poll(const PeerPollConfig& peer, const std::string& name) {
+    if (!peer.enabled) {
+        return;
+    }
+    if (peer.host.empty() || peer.port == 0) {
+        throw std::invalid_argument(name + " requires a host and a non-zero port");
+    }
+    if (peer.poll_interval_ms == 0 || peer.request_timeout_ms == 0) {
+        throw std::invalid_argument(name + " poll interval and request timeout must be positive");
+    }
+    if (peer.poll_interval_ms > 5'000) {
+        throw std::invalid_argument(name + " poll_interval_ms must not exceed 5000");
+    }
+    // A request allowed to outlast its own poll period lets slow peers queue up behind each other.
+    if (peer.request_timeout_ms > peer.poll_interval_ms * 5) {
+        throw std::invalid_argument(name +
+                                    " request_timeout_ms must not exceed 5x poll_interval_ms");
+    }
+    if (peer.staleness_timeout_ms < peer.poll_interval_ms) {
+        throw std::invalid_argument(name +
+                                    " staleness_timeout_ms must be at least poll_interval_ms");
+    }
+}
 
 } // namespace
 
@@ -107,6 +145,20 @@ ServiceConfig load_config(const std::filesystem::path& path) {
         config.robot_agent.host = robot_agent["host"].as<std::string>(config.robot_agent.host);
         config.robot_agent.port = robot_agent["port"].as<std::uint16_t>(config.robot_agent.port);
     }
+
+    const YAML::Node transport = root["transport"];
+    if (transport) {
+        config.transport.enabled = transport["enabled"].as<bool>(config.transport.enabled);
+        config.transport.bind_address =
+            transport["bind_address"].as<std::string>(config.transport.bind_address);
+        config.transport.port = transport["port"].as<std::uint16_t>(config.transport.port);
+        config.transport.request_timeout_ms =
+            transport["request_timeout_ms"].as<std::uint32_t>(config.transport.request_timeout_ms);
+        config.transport.max_request_bytes =
+            transport["max_request_bytes"].as<std::size_t>(config.transport.max_request_bytes);
+        read_peer_poll(transport["payload_service"], config.transport.payload_service);
+        read_peer_poll(transport["robot_agent_status"], config.transport.robot_agent_status);
+    }
 #else
     (void)path;
     throw std::runtime_error("yaml-cpp support was not available when the service was built");
@@ -168,6 +220,24 @@ void validate_config(const ServiceConfig& config) {
     if (config.robot_agent.enabled && config.robot_agent.port == 0) {
         throw std::invalid_argument("robot_agent.port is intentionally unset; disable integration");
     }
+    if (config.transport.enabled) {
+        if (config.transport.port == 0) {
+            throw std::invalid_argument("transport.port must be greater than zero");
+        }
+        if (config.transport.port == config.streaming.port) {
+            throw std::invalid_argument("transport.port must differ from the RTSP port");
+        }
+        if (config.transport.request_timeout_ms == 0) {
+            throw std::invalid_argument("transport.request_timeout_ms must be greater than zero");
+        }
+        if (config.transport.max_request_bytes < 256 ||
+            config.transport.max_request_bytes > 1'048'576) {
+            throw std::invalid_argument(
+                "transport.max_request_bytes must be in the range 256..1048576");
+        }
+    }
+    validate_peer_poll(config.transport.payload_service, "transport.payload_service");
+    validate_peer_poll(config.transport.robot_agent_status, "transport.robot_agent_status");
 }
 
 } // namespace perception::core

@@ -69,10 +69,38 @@ struct RobotAgentConfig {
     std::uint16_t port{0};
 };
 
+// A peer perception-service polls for one of the EKF's inbound measurements. Both peers are
+// optional at runtime: a peer that stops answering degrades localization quality and must never
+// stall capture or streaming.
+struct PeerPollConfig {
+    bool enabled{false};
+    std::string host;
+    std::uint16_t port{0};
+    std::uint32_t poll_interval_ms{200};
+    std::uint32_t request_timeout_ms{1'000};
+    // A measurement older than this is reported as unavailable instead of being fused.
+    std::uint32_t staleness_timeout_ms{2'000};
+};
+
+struct TransportConfig {
+    // Inbound API that robot-agent calls; same JSON/TCP framing as payload-service.
+    bool enabled{false};
+    std::string bind_address{"0.0.0.0"};
+    std::uint16_t port{50053};
+    std::uint32_t request_timeout_ms{5'000};
+    std::size_t max_request_bytes{65'536};
+    // GNSS/RTK is read straight from payload-service: routing it through robot-agent would add a
+    // second hop to the one measurement whose timestamp and age the EKF depends on.
+    PeerPollConfig payload_service{false, "192.168.1.206", 50052, 200, 1'000, 2'000};
+    // Vendor odometry/heading still comes from robot-agent, which owns the quadruped link.
+    PeerPollConfig robot_agent_status{false, "192.168.1.206", 5'080, 200, 1'000, 2'000};
+};
+
 struct ServiceConfig {
     CameraConfig camera;
     StreamingConfig streaming;
     RobotAgentConfig robot_agent;
+    TransportConfig transport;
 };
 
 [[nodiscard]] ServiceConfig load_config(const std::filesystem::path& path);

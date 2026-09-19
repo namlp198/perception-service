@@ -5,6 +5,9 @@
 #include "perception/pipeline/capture_pipeline.hpp"
 #include "perception/streaming/rtsp_server.hpp"
 #include "perception/streaming/stream_manager.hpp"
+#include "perception/transport/remote_inputs.hpp"
+#include "perception/transport/service_state_provider.hpp"
+#include "perception/transport/tcp_json_server.hpp"
 
 #include <chrono>
 #include <thread>
@@ -57,14 +60,32 @@ int Application::run() {
     }
 
     streaming::StreamManager streams(rtsp, config_.streaming.depth_visual);
+
+    // The mission boundary is started after streaming and is never allowed to fail the service:
+    // operator video must survive a mission-side peer or a busy port, exactly as it survives a
+    // silent IMU.
+    transport::ServiceStateProvider state_provider(config_, camera_health);
+    transport::TcpJsonServer transport_server(config_.transport, state_provider);
+    if (config_.transport.enabled && !transport_server.start()) {
+#if defined(PERCEPTION_HAS_SPDLOG)
+        spdlog::error("transport server unavailable; RGB/depth streaming continues");
+#endif
+    }
+    transport::RemoteInputs remote_inputs(config_.transport);
+    if (!remote_inputs.start()) {
+#if defined(PERCEPTION_HAS_SPDLOG)
+        spdlog::error("remote input polling unavailable; localization inputs are missing");
+#endif
+    }
+
     pipeline::CapturePipeline capture(camera, streams, camera_health);
     std::size_t consecutive_capture_failures = 0;
     auto next_metrics_at = std::chrono::steady_clock::now() + std::chrono::seconds(5);
-#if defined(PERCEPTION_HAS_SPDLOG)
+    // Sample rates are measured here and handed to the transport provider, so the journal and the
+    // `perception.get_health` reply can never disagree about them.
     auto previous_metrics_at = std::chrono::steady_clock::now();
     std::uint64_t previous_accelerometer_samples = 0;
     std::uint64_t previous_gyroscope_samples = 0;
-#endif
 #if defined(PERCEPTION_HAS_SPDLOG)
     spdlog::info("perception-service running; RTSP port={}", config_.streaming.port);
 #endif
@@ -89,7 +110,6 @@ int Application::run() {
 
         const auto now = std::chrono::steady_clock::now();
         if (now >= next_metrics_at) {
-#if defined(PERCEPTION_HAS_SPDLOG)
             const auto now_ns = static_cast<std::uint64_t>(
                 std::chrono::duration_cast<std::chrono::nanoseconds>(now.time_since_epoch())
                     .count());
@@ -106,6 +126,8 @@ int Application::run() {
                     ? static_cast<double>(health.gyroscope_samples - previous_gyroscope_samples) /
                           interval_seconds
                     : 0.0;
+            state_provider.update_sample_rates(accelerometer_hz, gyroscope_hz);
+#if defined(PERCEPTION_HAS_SPDLOG)
             const auto imu_timeout =
                 std::chrono::milliseconds(config_.camera.imu.liveness_timeout_ms);
             const bool imu_ready = config_.camera.imu.enabled && health.accelerometer_samples > 0 &&
@@ -124,15 +146,37 @@ int Application::run() {
                          health.accelerometer_age.count(), health.accelerometer_dropped,
                          health.gyroscope_samples, gyroscope_hz, health.gyroscope_age.count(),
                          health.gyroscope_dropped, imu_ready, imu_ready);
+            if (config_.transport.enabled || config_.transport.payload_service.enabled ||
+                config_.transport.robot_agent_status.enabled) {
+                const auto server_metrics = transport_server.metrics();
+                const auto input_metrics = remote_inputs.metrics();
+                spdlog::info("transport.listening={} transport.requests={} "
+                             "transport.rejected={} transport.errors={} "
+                             "gnss.enabled={} gnss.fresh={} gnss.samples={} "
+                             "gnss.failures={} gnss.age_ms={} "
+                             "vendor.enabled={} vendor.fresh={} vendor.samples={} "
+                             "vendor.failures={} vendor.age_ms={}",
+                             transport_server.running(), server_metrics.requests_served,
+                             server_metrics.requests_rejected, server_metrics.connection_errors,
+                             input_metrics.gnss.enabled, input_metrics.gnss.fresh,
+                             input_metrics.gnss.samples, input_metrics.gnss.failures,
+                             input_metrics.gnss.last_sample_age_ms,
+                             input_metrics.vendor_motion.enabled, input_metrics.vendor_motion.fresh,
+                             input_metrics.vendor_motion.samples,
+                             input_metrics.vendor_motion.failures,
+                             input_metrics.vendor_motion.last_sample_age_ms);
+            }
+#endif
             previous_metrics_at = now;
             previous_accelerometer_samples = health.accelerometer_samples;
             previous_gyroscope_samples = health.gyroscope_samples;
-#endif
             next_metrics_at = now + std::chrono::seconds(5);
         }
     }
 
     capture.request_stop();
+    remote_inputs.stop();
+    transport_server.stop();
     rtsp.stop();
     camera.stop();
 #if defined(PERCEPTION_HAS_SPDLOG)

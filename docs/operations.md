@@ -150,3 +150,27 @@ the service restart; the currently running service is therefore left untouched.
 Field recordings must preserve RGB, both IR streams, metric depth, IMU, calibration and timestamps;
 later phases add GNSS, vendor odometry and estimator output. Large datasets belong under ignored
 storage, never in Git. Every field failure should become an offline replay regression test.
+
+## Mission transport (port 50053)
+
+The perception API and the two peer pollers are configured under `transport:` and ship disabled. They
+start after streaming and are never allowed to fail the service: if the port cannot be bound or a peer
+is unreachable, the journal records it and RGB/depth keep publishing. Verify from the Agent PC with
+the same shape robot-agent uses:
+
+```bash
+printf '{"action":"service.health"}' | nc -q 1 192.168.1.220 50053
+printf '{"action":"perception.get_localization"}' | nc -q 1 192.168.1.220 50053
+```
+
+Expect `status":"ok"` and `protocol_version":1`. `perception.get_localization` reports
+`available:false` and `quality:"lost"` until the EKF branch exists; that is the intended answer, not a
+fault. A request declaring another `protocol_version` is refused, and an unknown action returns
+`unsupported action`.
+
+Per-interval journal lines carry `transport.listening`, `transport.requests`, `transport.rejected`,
+`transport.errors` and, per peer, `enabled`, `fresh`, `samples`, `failures` and `age_ms`. Diagnosing a
+missing measurement starts there: `failures` rising means the peer or the network, while `samples`
+rising with `fresh=false` means the sample is arriving too old for its `staleness_timeout_ms`. GNSS is
+polled straight from payload-service on 50052 and vendor heading from robot-agent on 5080, so a GNSS
+outage and a robot-agent outage are visible as separate counters.
