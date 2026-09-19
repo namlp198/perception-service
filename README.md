@@ -6,14 +6,26 @@ state. Mission authority remains in `robot-agent` at `192.168.1.206`.
 
 ## Current status
 
-This repository is implementing V0.1. RGB, depth and IMU acquisition from a D435i are implemented;
-the operator endpoints publish real H.264/RTP through gst-rtsp-server with bounded low-latency
-queues. The deployed Orin Nano has no hardware video encoder, so production RTSP uses a validated
-low-latency `x264enc` path; `nvv4l2h264enc` remains an optional path for Orin NX/AGX targets.
-Camera reconnect, graceful shutdown and basic live metrics are
-implemented. Detailed camera discovery and bounded, independently timestamped accelerometer/gyroscope
-capture are implemented in source; Jetson build and hardware acceptance remain required. Hardware-
-encoder validation and the controlled unplug/replug recovery test also remain V0.1 work.
+**V0.1 is complete (2026-09-19).** RGB, depth and IMU acquisition from a D435i are implemented and
+live-verified on the Jetson; the operator endpoints publish real H.264/RTP through gst-rtsp-server
+with bounded low-latency queues. The deployed Orin Nano has no hardware video encoder, so production
+RTSP uses a validated low-latency `x264enc` path; `nvv4l2h264enc` remains an optional path for Orin
+NX/AGX targets. Detailed camera discovery, bounded independently timestamped accelerometer/gyroscope
+capture, live metrics, graceful shutdown, client reconnect, reboot recovery and controlled USB
+unplug/replug recovery without a process restart are all confirmed on hardware.
+
+Work has moved to the localization branch. The typed, versioned perception <-> mission contract
+(protocol version 1) is implemented and deployed: see [inter-service](docs/inter-service.md). The
+listener answers on port 50053; the two peer poll clients stay disabled until the V0.5 EKF consumes
+them, because each adds a 5 Hz load to a live mission service.
+
+The shared foundation both branches need is in place: `geometry/` frames and transforms
+(`camera_optical -> camera_body -> base_link`), robot-frame point clouds, and a dataset format with
+`dataset-record` plus a `ReplayCamera` that replays a recording through the same camera interface as
+live hardware. See [geometry and dataset replay](docs/geometry-and-replay.md).
+
+The execution order for V0.2-V1.0 is in [roadmap](docs/roadmap.md); it reorders the fundamental
+document's milestones without renumbering them.
 
 The D435i profile uses accelerometer 100 Hz and gyroscope 200 Hz. One process owns the D435i, but
 video and IMU are two independent sessions on that device: a video-only `rs2::pipeline` carries
@@ -67,6 +79,8 @@ D435i pipeline:
 ```bash
 ./build/jetson-local/camera-info config/default.yaml         # add --hardware-reset to re-enumerate the D435i
 ./build/jetson-local/imu-info config/default.yaml 10            # [accel_fps] [gyro_fps] [video|no-video] optional
+./scripts/jetson/record-dataset.sh --confirm-service-interruption <name> 30
+./build/jetson-local/dataset-info datasets/<name> 0            # verify a recording offline
 ./scripts/jetson/validate-v01-hardware.sh --confirm-service-interruption jetson-local
 ./scripts/jetson/verify-running-service.sh
 ```
@@ -130,6 +144,7 @@ use non-interactive `BatchMode` by default.
 - [Architecture](docs/architecture.md)
 - [Setup and build](docs/setup.md)
 - [Streaming](docs/streaming.md)
+- [Geometry and dataset replay](docs/geometry-and-replay.md)
 - [Inter-service boundary](docs/inter-service.md)
 - [Localization model](docs/localization.md)
 - [Operations and health](docs/operations.md)

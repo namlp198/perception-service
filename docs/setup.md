@@ -65,6 +65,45 @@ available. It never reports a missing camera or encoder as healthy.
 
 ## Development-PC deploy prerequisites
 
+## Building from Windows through WSL
+
+The Windows MinGW toolchains shipped with IDEs have been unreliable here (CLion's GCC 13.1 cannot
+spawn `cc1plus` in some shells), and they cannot compile the POSIX transport sockets at all. Building
+in WSL is the supported way to get a full host build from a Windows development PC:
+
+```bash
+sudo apt-get install -y g++ cmake make libspdlog-dev libyaml-cpp-dev libgtest-dev libeigen3-dev
+```
+
+Install the optional dependencies too: without them the build silently drops the spdlog logging
+paths, the YAML configuration loader and the GoogleTest harness, so a green build proves much less.
+Then, from Windows PowerShell:
+
+```powershell
+wsl bash -lc "cd /mnt/d/<path>/perception-service && cmake -S . -B ~/psbuild -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTING=ON && cmake --build ~/psbuild -j4 && ctest --test-dir ~/psbuild --output-on-failure"
+```
+
+Build outside `/mnt` (as above) because WSL's `/tmp` is cleared when the distribution restarts and
+`/mnt` paths are slow.
+
+**A Debug build alone does not predict the Jetson build.** The Jetson preset is `RelWithDebInfo`, and
+at `-O2` glibc enables `_FORTIFY_SOURCE`, which marks `read`/`write` and friends
+`warn_unused_result`. A `(void)` cast does not satisfy that attribute, so calls that compile cleanly
+at `-O0` become `-Werror=unused-result` failures on the Jetson. This cost one deploy round on
+2026-09-19. Always repeat the build in the Jetson's configuration:
+
+```bash
+cmake -S . -B ~/psrel -DCMAKE_BUILD_TYPE=RelWithDebInfo -DBUILD_TESTING=ON && cmake --build ~/psrel -j4
+```
+
+Installing `g++-11` additionally lets the host match the Jetson's compiler generation. Distro
+spdlog/yaml-cpp cannot be *linked* against it (they are built with the newer libstdc++), but
+compiling every portable translation unit with `g++-11 -O2` and the project's warning flags
+reproduces the Jetson's warning surface, which is where these failures appear.
+
+Even then the host build does not prove the Jetson build: librealsense, GStreamer and OpenCV code
+paths only compile there.
+
 Linux and WSL deployment hosts need `rsync` and the OpenSSH client. On Ubuntu or WSL Ubuntu:
 
 ```bash
