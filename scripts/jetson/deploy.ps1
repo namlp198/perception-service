@@ -69,9 +69,30 @@ try {
     if ($DetailedLog) { $DeployArguments += '--verbose' }
 
     Write-Host "Starting Jetson deployment at $(Get-Date -Format o)"
-    & $WslExe --cd $ProjectRoot bash ./scripts/jetson/deploy.sh @DeployArguments 2>&1 |
-        ForEach-Object { Write-Host $_ }
-    $DeployExitCode = $LASTEXITCODE
+    # Windows PowerShell wraps every stderr line of a native command in an ErrorRecord, so with
+    # ErrorActionPreference='Stop' the FIRST stderr line aborts the pipeline. That silently
+    # truncated a compiler diagnostic to its own "In file included from ..." header on
+    # 2026-09-19. Relax the preference around the native call and render records as plain text so
+    # the whole remote build log survives.
+    $PreviousErrorAction = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        & $WslExe --cd $ProjectRoot bash ./scripts/jetson/deploy.sh @DeployArguments 2>&1 |
+            ForEach-Object {
+                $Text = if ($_ -is [System.Management.Automation.ErrorRecord]) { $_.ToString() } else { [string]$_ }
+                # The remote build emits Unix line endings with no carriage return. Writing such a
+                # chunk verbatim leaves the console cursor where it was, so each line starts further
+                # right than the last and the log stair-steps across the screen. Split on any line
+                # break and write each line on its own so Write-Host supplies a proper CRLF.
+                foreach ($Line in ($Text -split "`r`n|`n|`r")) {
+                    Write-Host $Line
+                }
+            }
+        $DeployExitCode = $LASTEXITCODE
+    }
+    finally {
+        $ErrorActionPreference = $PreviousErrorAction
+    }
     if ($DeployExitCode -eq 3) {
         # Sync/build/restart and RGB/depth streaming succeeded; only the mandatory IMU
         # acceptance is unmet. Surface it as its own outcome and preserve the exit code.
